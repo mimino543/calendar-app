@@ -4,8 +4,15 @@ const path = require('path');
 const vm = require('vm');
 const { webcrypto } = require('crypto');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
-const { STORAGE_KEY, buildMonth, dateToKey } = require('../app.js');
+const APP_JS = path.join(__dirname, '..', 'apps', 'web', 'public', 'calendar-app', 'app.js');
+const src = fs.readFileSync(APP_JS, 'utf8');
+
+const loadApp = () => {
+  const module = { exports: {} };
+  new Function('module', 'exports', src)(module, module.exports);
+  return module.exports;
+};
+const { STORAGE_KEY, buildMonth, dateToKey } = loadApp();
 
 function makeEl() {
   const el = {

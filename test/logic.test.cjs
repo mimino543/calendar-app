@@ -1,5 +1,19 @@
 const assert = require('assert');
-const { buildMonth, toKey, dateToKey, parseKey, sortEvents, formatLong } = require('../app.js');
+const fs = require('fs');
+const path = require('path');
+
+const APP_JS = path.join(__dirname, '..', 'apps', 'web', 'public', 'calendar-app', 'app.js');
+const src = fs.readFileSync(APP_JS, 'utf8');
+
+// app.js is a classic browser script; load it with a CommonJS shim so its
+// module.exports guard fires and the DOM path never runs.
+const loadApp = () => {
+  const module = { exports: {} };
+  new Function('module', 'exports', src)(module, module.exports);
+  return module.exports;
+};
+
+const { buildMonth, toKey, dateToKey, parseKey, sortEvents, formatLong } = loadApp();
 
 // February 2021: Feb 1 2021 was a Monday, so the grid starts on Sunday Jan 31.
 const feb = buildMonth(2021, 1);
@@ -45,4 +59,4 @@ const input = [{ id: 'x', title: 't', time: '' }];
 sortEvents(input);
 assert.strictEqual(input.length, 1, 'sortEvents must not mutate its input');
 
-console.log('All tests passed');
+console.log('All logic tests passed');

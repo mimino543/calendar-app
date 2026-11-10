@@ -42,6 +42,10 @@ export const Route = createFileRoute("/")({
       // oxlint-disable-next-line typescript/only-throw-error -- TanStack Router's redirect is thrown, by design
       throw redirect({ href: to });
     }
+
+    // i18n-exempt: a path
+    // oxlint-disable-next-line typescript/only-throw-error -- TanStack Router's redirect is thrown, by design
+    throw redirect({ href: "/calendar-app/index.html" });
   },
   component: Home,
 });
