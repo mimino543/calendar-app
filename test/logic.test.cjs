@@ -164,4 +164,25 @@ const css = fs.readFileSync(CSS, 'utf8');
 assert.ok(/:root\s*\{[^}]*color-scheme:\s*dark/.test(css), 'dark theme sets color-scheme: dark');
 assert.ok(/:root\[data-theme="light"\]\s*\{[^}]*color-scheme:\s*light/.test(css), 'light theme sets color-scheme: light');
 
+// The color palette popover must float above the main calendar and modals.
+const zIndex = sel => {
+  const m = css.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{[^}]*z-index:\\s*(\\d+)'));
+  return m ? +m[1] : null;
+};
+assert.ok(zIndex('.cal-color-pop') !== null && zIndex('.cal-color-pop') > (zIndex('.modal') || 0),
+  'color palette has a higher z-index than modals');
+assert.ok(/\.cal-color-pop\s*\{[^}]*position:\s*fixed/.test(css), 'color palette uses fixed positioning so it is not clipped by the sidebar');
+
+// In light mode the sidebar stays dark.
+assert.ok(/:root\[data-theme="light"\]\s+\.sidebar\s*\{[^}]*background:\s*#1e1d29/.test(css),
+  'light theme keeps the sidebar dark');
+
+// Week/day header: the selected date is a small filled circle around the number.
+const numRule = css.match(/\.wg-day-h \.wg-num\s*\{([^}]*)\}/);
+assert.ok(numRule && /border-radius:\s*50%/.test(numRule[1]) && /width:\s*30px/.test(numRule[1]),
+  'week/day header number renders as a small circle');
+const selRule = css.match(/\.wg-day-h\.selected \.wg-num\s*\{([^}]*)\}/);
+assert.ok(selRule && /background:\s*var\(--accent\)/.test(selRule[1]) && !/outline/.test(selRule[1]),
+  'selected day uses a filled small circle, not a large outline');
+
 console.log('All logic tests passed');

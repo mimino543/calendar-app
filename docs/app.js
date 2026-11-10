@@ -510,9 +510,15 @@
     paletteTarget = target;
     renderPalette();
     els.calColorPop.hidden = false;
-    if (anchor && typeof anchor.offsetTop === 'number') {
-      els.calColorPop.style.top = (anchor.offsetTop + (anchor.offsetHeight || 24) + 6) + 'px';
-      els.calColorPop.style.left = Math.max(0, anchor.offsetLeft || 0) + 'px';
+    var pop = els.calColorPop;
+    if (anchor && typeof anchor.getBoundingClientRect === 'function') {
+      var r = anchor.getBoundingClientRect();
+      var vw = (typeof window !== 'undefined' && window.innerWidth) || 1024;
+      var vh = (typeof window !== 'undefined' && window.innerHeight) || 768;
+      var pw = pop.offsetWidth || 180;
+      var ph = pop.offsetHeight || 150;
+      pop.style.top = Math.max(8, Math.min(r.bottom + 6, vh - ph - 8)) + 'px';
+      pop.style.left = Math.max(8, Math.min(r.left, vw - pw - 8)) + 'px';
     }
   }
 
