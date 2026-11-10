@@ -15,7 +15,7 @@ const {
   buildMonth, buildWeek, toKey, dateToKey, parseKey, keyToDate,
   addDaysKey, addMonthsKey, addYearsKey, minutesOf, timeOf,
   sortEvents, formatLong, formatShort, repeatLabel, repeatOccurrences,
-  eventOccurrences, defaultCalendars, STORAGE_KEY, CALENDARS_KEY, THEME_KEY
+  eventOccurrences, defaultCalendars, CALENDAR_COLORS, STORAGE_KEY, CALENDARS_KEY, THEME_KEY
 } = loadApp();
 
 assert.strictEqual(STORAGE_KEY, 'calendar.events.v2');
@@ -151,5 +151,11 @@ const cals = defaultCalendars();
 assert.strictEqual(cals.length, 3);
 assert.deepStrictEqual(cals.map(c => c.id), ['personal', 'work', 'family']);
 assert.ok(cals.every(c => c.color && c.visible === true));
+
+// Color preset: exactly 20 unique valid hex colors, and defaults come from it.
+assert.strictEqual(CALENDAR_COLORS.length, 20);
+assert.strictEqual(new Set(CALENDAR_COLORS).size, 20, 'preset colors are unique');
+assert.ok(CALENDAR_COLORS.every(c => /^#[0-9a-f]{6}$/i.test(c)), 'preset colors are 6-digit hex');
+assert.ok(cals.every(c => CALENDAR_COLORS.indexOf(c.color) !== -1), 'default calendars use preset colors');
 
 console.log('All logic tests passed');

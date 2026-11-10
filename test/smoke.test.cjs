@@ -43,7 +43,7 @@ function makeEl() {
 const ids = [
   'viewLabel', 'prevBtn', 'todayBtn', 'nextBtn', 'newEventBtn', 'themeToggle',
   'viewMonth', 'viewWeek', 'viewDay', 'viewAgenda',
-  'miniMonth', 'calendarList', 'newCalName', 'newCalColor', 'addCalBtn', 'mainView',
+  'miniMonth', 'calendarList', 'newCalName', 'newCalColorBtn', 'calColorPop', 'calColorGrid', 'addCalBtn', 'mainView',
   'eventModal', 'evModalTitle', 'eventForm', 'evTitle', 'evCalendar', 'evCalDot', 'evDate',
   'evAllDay', 'evStart', 'evEnd', 'evLocation', 'evNotes', 'evReminder',
   'evRepeat', 'evRepeatInterval', 'evRepeatUntil', 'evDelete', 'evCancel',
@@ -154,28 +154,41 @@ assert.strictEqual(saved.length, 0, 'event deleted');
 assert.strictEqual(els.detailModal.hidden, true, 'detail modal closes after delete');
 
 els.newCalName.value = 'Trips';
-els.newCalColor.value = '#ff0000';
+els.newCalColorBtn._handlers.click();
+assert.strictEqual(els.calColorPop.hidden, false, 'color palette opens');
+const palSwatches = findAll(els.calColorGrid, 'pal-swatch');
+assert.strictEqual(palSwatches.length, 20, 'palette offers 20 preset colors');
+const redSwatch = palSwatches.filter(s => s.title === '#f44336')[0];
+assert.ok(redSwatch, 'palette contains #f44336');
+redSwatch._handlers.click();
+assert.strictEqual(els.calColorPop.hidden, true, 'palette closes after picking a color');
+assert.strictEqual(els.newCalColorBtn.style.background, '#f44336', 'color button shows the picked color');
 els.addCalBtn._handlers.click();
 assert.strictEqual(els.calendarList.children.length, 4, 'calendar added to sidebar');
 let cals = JSON.parse(store[CALENDARS_KEY]);
 assert.strictEqual(cals.length, 4);
 assert.strictEqual(cals[3].name, 'Trips');
-assert.strictEqual(cals[3].color, '#ff0000');
+assert.strictEqual(cals[3].color, '#f44336');
 const tripsId = cals[3].id;
 
 els.newEventBtn._handlers.click();
 assert.strictEqual(els.evCalendar.children.length, 4, 'event modal lists the new calendar');
 els.evCalendar.value = tripsId;
 els.evCalendar._handlers.change();
-assert.strictEqual(els.evCalDot.style.background, '#ff0000', 'dot follows the selected calendar');
+assert.strictEqual(els.evCalDot.style.background, '#f44336', 'dot follows the selected calendar');
 els.evCancel._handlers.click();
 
 const row0 = els.calendarList.children[0];
 const swatch = row0.children[0];
-swatch.value = '#123456';
-swatch._handlers.change();
+assert.strictEqual(swatch.className, 'cal-swatch', 'row starts with a color swatch button');
+swatch._handlers.click();
+assert.strictEqual(els.calColorPop.hidden, false, 'palette opens to recolor a calendar');
+const blueSwatch = findAll(els.calColorGrid, 'pal-swatch').filter(s => s.title === '#2196f3')[0];
+assert.ok(blueSwatch, 'palette contains #2196f3');
+blueSwatch._handlers.click();
+assert.strictEqual(els.calColorPop.hidden, true, 'palette closes after recolor');
 cals = JSON.parse(store[CALENDARS_KEY]);
-assert.strictEqual(cals[0].color, '#123456', 'recolor persisted');
+assert.strictEqual(cals[0].color, '#2196f3', 'recolor persisted');
 
 const tripsRow = els.calendarList.children[3];
 const delBtn = tripsRow.children[3];

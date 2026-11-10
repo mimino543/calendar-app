@@ -135,6 +135,13 @@
     });
   }
 
+  var CALENDAR_COLORS = [
+    '#f44336', '#e91e63', '#9c27b0', '#673ab7', '#6d5ae0',
+    '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688',
+    '#2f9e6e', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b',
+    '#ffc107', '#e8890c', '#ff5722', '#795548', '#607d8b'
+  ];
+
   function defaultCalendars() {
     return [
       { id: 'personal', name: 'Personal', color: '#6d5ae0', visible: true },
@@ -170,7 +177,8 @@
       reminderLabel: reminderLabel,
       repeatOccurrences: repeatOccurrences,
       eventOccurrences: eventOccurrences,
-      defaultCalendars: defaultCalendars
+      defaultCalendars: defaultCalendars,
+      CALENDAR_COLORS: CALENDAR_COLORS
     };
     return;
   }
@@ -232,6 +240,8 @@
 
   var today = todayKey();
   var state = { view: 'month', cursor: today, selected: today, editing: null };
+  var pendingColor = '#6d5ae0';
+  var paletteTarget = null;
 
   var els = {
     viewLabel: document.getElementById('viewLabel'),
@@ -247,7 +257,9 @@
     miniMonth: document.getElementById('miniMonth'),
     calendarList: document.getElementById('calendarList'),
     newCalName: document.getElementById('newCalName'),
-    newCalColor: document.getElementById('newCalColor'),
+    newCalColorBtn: document.getElementById('newCalColorBtn'),
+    calColorPop: document.getElementById('calColorPop'),
+    calColorGrid: document.getElementById('calColorGrid'),
     addCalBtn: document.getElementById('addCalBtn'),
     mainView: document.getElementById('mainView'),
     eventModal: document.getElementById('eventModal'),
@@ -403,14 +415,14 @@
     els.calendarList.innerHTML = '';
     calendars.forEach(function (c, i) {
       var row = el('div', 'cal-item');
-      var swatch = el('input', 'cal-swatch');
-      swatch.type = 'color';
-      swatch.value = c.color;
+      var swatch = el('button', 'cal-swatch');
+      swatch.type = 'button';
+      swatch.style.background = c.color;
       swatch.title = 'Change color';
-      swatch.addEventListener('change', function () {
-        calendars[i].color = swatch.value;
-        saveJSON(CALENDARS_KEY, calendars);
-        render();
+      swatch.setAttribute('aria-label', 'Change color of ' + c.name);
+      swatch.addEventListener('click', function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        togglePalette({ mode: 'cal', id: c.id }, swatch);
       });
       var name = el('span', 'cal-name', c.name);
       var toggle = el('input');
@@ -439,7 +451,7 @@
   function addCalendar() {
     var name = (els.newCalName.value || '').trim();
     if (!name) return;
-    calendars.push({ id: uid(), name: name, color: els.newCalColor.value || '#6d5ae0', visible: true });
+    calendars.push({ id: uid(), name: name, color: pendingColor, visible: true });
     els.newCalName.value = '';
     saveJSON(CALENDARS_KEY, calendars);
     render();
@@ -447,12 +459,76 @@
 
   function deleteCalendar(id) {
     if (calendars.length <= 1) return;
-    calendars = calendars.filter(function (c) { return c.id !== id; });
+    var remaining = calendars.filter(function (c) { return c.id !== id; });
+    var target = calendarById(id);
+    if (typeof confirm === 'function') {
+      if (!confirm('Delete calendar "' + (target ? target.name : id) + '"? Its events will move to "' + remaining[0].name + '".')) return;
+    }
+    calendars = remaining;
     var fallback = calendars[0].id;
     events.forEach(function (ev) { if (ev.calendarId === id) ev.calendarId = fallback; });
     saveJSON(CALENDARS_KEY, calendars);
     saveJSON(STORAGE_KEY, events);
     render();
+  }
+
+  function togglePalette(target, anchor) {
+    if (!els.calColorPop.hidden && paletteTarget && paletteTarget.mode === target.mode && paletteTarget.id === target.id) {
+      closePalette();
+    } else {
+      openPalette(target, anchor);
+    }
+  }
+
+  function openPalette(target, anchor) {
+    paletteTarget = target;
+    renderPalette();
+    els.calColorPop.hidden = false;
+    if (anchor && typeof anchor.offsetTop === 'number') {
+      els.calColorPop.style.top = (anchor.offsetTop + (anchor.offsetHeight || 24) + 6) + 'px';
+      els.calColorPop.style.left = Math.max(0, anchor.offsetLeft || 0) + 'px';
+    }
+  }
+
+  function closePalette() {
+    els.calColorPop.hidden = true;
+    paletteTarget = null;
+  }
+
+  function renderPalette() {
+    els.calColorGrid.innerHTML = '';
+    var current = paletteTarget && paletteTarget.mode === 'cal'
+      ? (calendarById(paletteTarget.id) || {}).color
+      : pendingColor;
+    CALENDAR_COLORS.forEach(function (color) {
+      var s = el('button', 'pal-swatch' + (color === current ? ' selected' : ''));
+      s.type = 'button';
+      s.style.background = color;
+      s.title = color;
+      s.setAttribute('aria-label', 'Color ' + color);
+      s.addEventListener('click', function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        applyPaletteColor(color);
+      });
+      els.calColorGrid.appendChild(s);
+    });
+  }
+
+  function applyPaletteColor(color) {
+    if (!paletteTarget) { closePalette(); return; }
+    if (paletteTarget.mode === 'cal') {
+      var c = calendarById(paletteTarget.id);
+      if (c) {
+        c.color = color;
+        saveJSON(CALENDARS_KEY, calendars);
+      }
+      closePalette();
+      render();
+    } else {
+      pendingColor = color;
+      els.newCalColorBtn.style.background = color;
+      closePalette();
+    }
   }
 
   function renderMain() {
@@ -778,6 +854,16 @@
   els.evAllDay.addEventListener('change', updateTimeFields);
   els.evCalendar.addEventListener('change', updateCalDot);
   els.addCalBtn.addEventListener('click', addCalendar);
+  els.newCalColorBtn.addEventListener('click', function (e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    togglePalette({ mode: 'new' }, els.newCalColorBtn);
+  });
+  document.addEventListener('click', function (e) {
+    if (els.calColorPop.hidden) return;
+    var t = e && e.target;
+    if (t && typeof els.calColorPop.contains === 'function' && els.calColorPop.contains(t)) return;
+    closePalette();
+  });
   els.newCalName.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') {
       if (e.preventDefault) e.preventDefault();
@@ -799,12 +885,13 @@
   document.addEventListener('keydown', function (e) {
     var tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if (e.key === 'Escape') { closeModals(); return; }
+    if (e.key === 'Escape') { closeModals(); closePalette(); return; }
     if (e.key === 'ArrowLeft') shiftPeriod(-1);
     else if (e.key === 'ArrowRight') shiftPeriod(1);
   });
 
   migrateLegacy();
   applyTheme(theme);
+  els.newCalColorBtn.style.background = pendingColor;
   render();
 })();
