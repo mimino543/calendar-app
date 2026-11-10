@@ -181,6 +181,21 @@ assert.ok(asideBlock && asideBlock[0].indexOf('calColorPop') === -1 && /<div id=
 assert.ok(/:root\[data-theme="light"\]\s+\.sidebar\s*\{[^}]*background:\s*#1e1d29/.test(css),
   'light theme keeps the sidebar dark');
 
+// In light mode the top bar is dark too, matching the sidebar.
+assert.ok(/:root\[data-theme="light"\]\s+\.topbar\s*\{[^}]*--panel:\s*#1e1d29/.test(css),
+  'light theme keeps the top bar dark');
+
+// Mini calendar: today is a filled chip so it stays readable on the dark sidebar.
+assert.ok(/\.mm-cell\.today\s*\{[^}]*background:\s*var\(--accent\)[^}]*color:\s*#fff/.test(css),
+  'mini-calendar today uses a filled chip for contrast');
+
+// Week highlight in the mini calendar is one continuous box across the whole week row.
+assert.ok(/\.mm-cell\.in-week\s*\{[^}]*margin:\s*0 -1px/.test(css),
+  'week cells close the grid gaps so the highlight is continuous');
+assert.ok(/\.mm-cell\.in-week:nth-child\(7n\+1\)\s*\{[^}]*border-radius:\s*6px 0 0 6px/.test(css)
+  && /\.mm-cell\.in-week:nth-child\(7n\)\s*\{[^}]*border-radius:\s*0 6px 6px 0/.test(css),
+  'week box draws only the outer edges with rounded ends');
+
 // Week/day header: the selected date is a small filled circle around the number.
 const numRule = css.match(/\.wg-day-h \.wg-num\s*\{([^}]*)\}/);
 assert.ok(numRule && /border-radius:\s*50%/.test(numRule[1]) && /width:\s*30px/.test(numRule[1]),
