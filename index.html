@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="nav">
+    <button id="prevBtn" type="button" aria-label="Previous month">&#8249;</button>
+    <button id="todayBtn" type="button">Today</button>
+    <button id="nextBtn" type="button" aria-label="Next month">&#8250;</button>
+  </div>
+  <h1 id="monthTitle"></h1>
+</header>
+<main class="layout">
+  <section class="calendar">
+    <div id="grid" class="grid"></div>
+  </section>
+  <aside class="agenda">
+    <h2 id="agendaDate"></h2>
+    <form id="eventForm" class="event-form">
+      <input id="titleInput" type="text" placeholder="Event title" maxlength="120" required>
+      <input id="timeInput" type="time" aria-label="Event time (optional)">
+      <button type="submit">Add event</button>
+    </form>
+    <ul id="agendaList" class="agenda-list"></ul>
+  </aside>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
