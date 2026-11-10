@@ -29,6 +29,11 @@
     <div id="miniMonth" class="mini-month"></div>
     <div class="side-head">My calendars</div>
     <div id="calendarList"></div>
+    <div class="cal-add">
+      <input id="newCalName" type="text" maxlength="40" placeholder="New calendar name">
+      <input id="newCalColor" type="color" value="#6d5ae0" aria-label="New calendar color">
+      <button id="addCalBtn" type="button" title="Add calendar">+</button>
+    </div>
   </aside>
   <main id="mainView" class="main"></main>
 </div>
@@ -43,7 +48,10 @@
       </div>
       <div class="form-row">
         <label for="evCalendar">Calendar</label>
-        <select id="evCalendar"></select>
+        <div class="cal-select-row">
+          <span id="evCalDot" class="cal-dot"></span>
+          <select id="evCalendar"></select>
+        </div>
       </div>
       <div class="form-row form-grid">
         <div>
