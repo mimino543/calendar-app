@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg: #14131b;
   --panel: #1e1d29;
   --panel2: #282639;
@@ -13,6 +14,7 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg: #f4f4f8;
   --panel: #ffffff;
   --panel2: #efeef5;
@@ -177,6 +179,7 @@ button:hover { filter: brightness(1.15); }
 .mm-cell.outside { color: var(--muted); opacity: 0.5; }
 .mm-cell.today { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .mm-cell.selected { outline: 1px solid var(--accent); }
+.mm-cell.in-week { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 
 .cal-item {
   display: flex;
@@ -437,6 +440,8 @@ button:hover { filter: brightness(1.15); }
 
 .modal-card h2 { margin: 0 0 14px; font-size: 18px; }
 
+.cal-del-text { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+
 .form-row { margin-bottom: 12px; }
 
 .form-row label {
@@ -495,6 +500,13 @@ input:disabled { opacity: 0.5; }
 }
 
 .danger:hover { background: var(--danger); color: #fff; }
+
+.danger.solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 600;
+}
 
 .det-title { margin: 0 0 10px; font-size: 18px; }
 

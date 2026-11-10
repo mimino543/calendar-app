@@ -47,7 +47,8 @@ const ids = [
   'eventModal', 'evModalTitle', 'eventForm', 'evTitle', 'evCalendar', 'evCalDot', 'evDate',
   'evAllDay', 'evStart', 'evEnd', 'evLocation', 'evNotes', 'evReminder',
   'evRepeat', 'evRepeatInterval', 'evRepeatUntil', 'evDelete', 'evCancel',
-  'detailModal', 'detBody', 'detEdit', 'detDelete', 'detClose'
+  'detailModal', 'detBody', 'detEdit', 'detDelete', 'detClose',
+  'calDelModal', 'calDelText', 'calDelConfirm', 'calDelCancel'
 ];
 const els = {};
 ids.forEach(id => { els[id] = makeEl(); });
@@ -103,9 +104,11 @@ els.viewWeek._handlers.click();
 assert.strictEqual(els.mainView.children[0].className, 'week-wrap', 'week view renders');
 assert.ok(els.viewLabel.textContent.indexOf('–') !== -1, 'week label shows a range');
 assert.strictEqual(els.viewWeek.className, 'view-btn active');
+assert.strictEqual(findAll(els.miniMonth, 'in-week').length, 7, 'week view highlights the selected week in the mini calendar');
 
 els.viewMonth._handlers.click();
 assert.strictEqual(els.mainView.children[0].className, 'month-grid');
+assert.strictEqual(findAll(els.miniMonth, 'in-week').length, 0, 'month view clears the week highlight');
 
 const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 els.nextBtn._handlers.click();
@@ -194,6 +197,17 @@ const tripsRow = els.calendarList.children[3];
 const delBtn = tripsRow.children[3];
 assert.strictEqual(delBtn.className, 'cal-del');
 delBtn._handlers.click();
+assert.strictEqual(els.calDelModal.hidden, false, 'delete confirmation popup opens');
+assert.ok(els.calDelText.textContent.indexOf('Trips') !== -1, 'popup names the calendar to delete');
+const html = fs.readFileSync(path.join(__dirname, '..', 'apps', 'web', 'public', 'calendar-app', 'index.html'), 'utf8');
+assert.ok(/id="calDelConfirm"[^>]*class="[^"]*danger/.test(html), 'popup delete button uses the red danger style');
+els.calDelCancel._handlers.click();
+assert.strictEqual(els.calDelModal.hidden, true, 'cancel closes the popup');
+cals = JSON.parse(store[CALENDARS_KEY]);
+assert.strictEqual(cals.length, 4, 'cancel keeps the calendar');
+delBtn._handlers.click();
+els.calDelConfirm._handlers.click();
+assert.strictEqual(els.calDelModal.hidden, true, 'popup closes after confirming');
 assert.strictEqual(els.calendarList.children.length, 3, 'calendar deleted from sidebar');
 cals = JSON.parse(store[CALENDARS_KEY]);
 assert.strictEqual(cals.length, 3);
