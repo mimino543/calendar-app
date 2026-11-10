@@ -242,6 +242,7 @@
   var state = { view: 'month', cursor: today, selected: today, editing: null };
   var pendingColor = '#6d5ae0';
   var paletteTarget = null;
+  var pendingDeleteId = null;
 
   var els = {
     viewLabel: document.getElementById('viewLabel'),
@@ -284,7 +285,11 @@
     detBody: document.getElementById('detBody'),
     detEdit: document.getElementById('detEdit'),
     detDelete: document.getElementById('detDelete'),
-    detClose: document.getElementById('detClose')
+    detClose: document.getElementById('detClose'),
+    calDelModal: document.getElementById('calDelModal'),
+    calDelText: document.getElementById('calDelText'),
+    calDelConfirm: document.getElementById('calDelConfirm'),
+    calDelCancel: document.getElementById('calDelCancel')
   };
 
   function el(tag, cls, text) {
@@ -388,6 +393,11 @@
 
   function renderMini() {
     var p = parseKey(state.cursor);
+    var weekKeys = null;
+    if (state.view === 'week') {
+      weekKeys = {};
+      buildWeek(state.cursor).forEach(function (d) { weekKeys[d.key] = true; });
+    }
     els.miniMonth.innerHTML = '';
     var head = el('div', 'mm-head');
     head.appendChild(el('span', 'mm-title', MONTHS[p.m] + ' ' + p.y));
@@ -398,7 +408,8 @@
       var c = el('div', 'mm-cell'
         + (cell.inMonth ? '' : ' outside')
         + (cell.key === today ? ' today' : '')
-        + (cell.key === state.selected ? ' selected' : ''));
+        + (cell.key === state.selected ? ' selected' : '')
+        + (weekKeys && weekKeys[cell.key] ? ' in-week' : ''));
       c.textContent = String(cell.date.getDate());
       c.dataset.key = cell.key;
       c.addEventListener('click', function () {
@@ -441,7 +452,7 @@
         var del = el('button', 'cal-del', '×');
         del.type = 'button';
         del.title = 'Delete calendar';
-        del.addEventListener('click', function () { deleteCalendar(c.id); });
+        del.addEventListener('click', function () { requestDeleteCalendar(c.id); });
         row.appendChild(del);
       }
       els.calendarList.appendChild(row);
@@ -457,14 +468,29 @@
     render();
   }
 
-  function deleteCalendar(id) {
+  function requestDeleteCalendar(id) {
     if (calendars.length <= 1) return;
-    var remaining = calendars.filter(function (c) { return c.id !== id; });
     var target = calendarById(id);
-    if (typeof confirm === 'function') {
-      if (!confirm('Delete calendar "' + (target ? target.name : id) + '"? Its events will move to "' + remaining[0].name + '".')) return;
+    var fallback = null;
+    for (var i = 0; i < calendars.length; i++) {
+      if (calendars[i].id !== id) { fallback = calendars[i]; break; }
     }
-    calendars = remaining;
+    if (!target || !fallback) return;
+    pendingDeleteId = id;
+    els.calDelText.textContent = 'Delete calendar "' + target.name + '"? Its events will move to "' + fallback.name + '".';
+    els.calDelModal.hidden = false;
+  }
+
+  function closeCalDel() {
+    els.calDelModal.hidden = true;
+    pendingDeleteId = null;
+  }
+
+  function confirmDeleteCalendar() {
+    var id = pendingDeleteId;
+    closeCalDel();
+    if (!id || calendars.length <= 1) return;
+    calendars = calendars.filter(function (c) { return c.id !== id; });
     var fallback = calendars[0].id;
     events.forEach(function (ev) { if (ev.calendarId === id) ev.calendarId = fallback; });
     saveJSON(CALENDARS_KEY, calendars);
@@ -879,13 +905,16 @@
   });
   els.detDelete.addEventListener('click', function () { if (state.editing) deleteEvent(state.editing.id); });
   els.detClose.addEventListener('click', closeModals);
+  els.calDelConfirm.addEventListener('click', confirmDeleteCalendar);
+  els.calDelCancel.addEventListener('click', closeCalDel);
+  els.calDelModal.addEventListener('click', function (e) { if (e.target === els.calDelModal) closeCalDel(); });
   els.eventModal.addEventListener('click', function (e) { if (e.target === els.eventModal) closeModals(); });
   els.detailModal.addEventListener('click', function (e) { if (e.target === els.detailModal) closeModals(); });
 
   document.addEventListener('keydown', function (e) {
     var tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if (e.key === 'Escape') { closeModals(); closePalette(); return; }
+    if (e.key === 'Escape') { closeModals(); closePalette(); closeCalDel(); return; }
     if (e.key === 'ArrowLeft') shiftPeriod(-1);
     else if (e.key === 'ArrowRight') shiftPeriod(1);
   });

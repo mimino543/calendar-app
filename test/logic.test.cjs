@@ -158,4 +158,10 @@ assert.strictEqual(new Set(CALENDAR_COLORS).size, 20, 'preset colors are unique'
 assert.ok(CALENDAR_COLORS.every(c => /^#[0-9a-f]{6}$/i.test(c)), 'preset colors are 6-digit hex');
 assert.ok(cals.every(c => CALENDAR_COLORS.indexOf(c.color) !== -1), 'default calendars use preset colors');
 
+// Dark theme must set color-scheme so native date/time picker icons stay visible.
+const CSS = path.join(__dirname, '..', 'apps', 'web', 'public', 'calendar-app', 'styles.css');
+const css = fs.readFileSync(CSS, 'utf8');
+assert.ok(/:root\s*\{[^}]*color-scheme:\s*dark/.test(css), 'dark theme sets color-scheme: dark');
+assert.ok(/:root\[data-theme="light"\]\s*\{[^}]*color-scheme:\s*light/.test(css), 'light theme sets color-scheme: light');
+
 console.log('All logic tests passed');
