@@ -172,6 +172,10 @@ const zIndex = sel => {
 assert.ok(zIndex('.cal-color-pop') !== null && zIndex('.cal-color-pop') > (zIndex('.modal') || 0),
   'color palette has a higher z-index than modals');
 assert.ok(/\.cal-color-pop\s*\{[^}]*position:\s*fixed/.test(css), 'color palette uses fixed positioning so it is not clipped by the sidebar');
+const html = fs.readFileSync(path.join(__dirname, '..', 'apps', 'web', 'public', 'calendar-app', 'index.html'), 'utf8');
+const asideBlock = /<aside class="sidebar">[\s\S]*?<\/aside>/.exec(html);
+assert.ok(asideBlock && asideBlock[0].indexOf('calColorPop') === -1 && /<div id="calColorPop"/.test(html),
+  'color palette is a direct child of body, outside the scrollable sidebar, so it always floats above the calendar');
 
 // In light mode the sidebar stays dark.
 assert.ok(/:root\[data-theme="light"\]\s+\.sidebar\s*\{[^}]*background:\s*#1e1d29/.test(css),
