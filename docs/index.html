@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,27 +8,126 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="nav">
-    <button id="prevBtn" type="button" aria-label="Previous month">&#8249;</button>
-    <button id="todayBtn" type="button">Today</button>
-    <button id="nextBtn" type="button" aria-label="Next month">&#8250;</button>
+  <div class="brand">Calendar</div>
+  <div class="views">
+    <button id="viewMonth" class="view-btn" type="button">Month</button>
+    <button id="viewWeek" class="view-btn" type="button">Week</button>
+    <button id="viewDay" class="view-btn" type="button">Day</button>
+    <button id="viewAgenda" class="view-btn" type="button">Agenda</button>
   </div>
-  <h1 id="monthTitle"></h1>
+  <div class="nav">
+    <button id="prevBtn" type="button" aria-label="Previous">&#8249;</button>
+    <button id="todayBtn" type="button">Today</button>
+    <button id="nextBtn" type="button" aria-label="Next">&#8250;</button>
+  </div>
+  <h1 id="viewLabel"></h1>
+  <button id="newEventBtn" class="primary" type="button">+ New event</button>
+  <button id="themeToggle" class="icon-btn" type="button" aria-label="Toggle theme">&#9728;&#65039;</button>
 </header>
-<main class="layout">
-  <section class="calendar">
-    <div id="grid" class="grid"></div>
-  </section>
-  <aside class="agenda">
-    <h2 id="agendaDate"></h2>
-    <form id="eventForm" class="event-form">
-      <input id="titleInput" type="text" placeholder="Event title" maxlength="120" required>
-      <input id="timeInput" type="time" aria-label="Event time (optional)">
-      <button type="submit">Add event</button>
-    </form>
-    <ul id="agendaList" class="agenda-list"></ul>
+<div class="layout">
+  <aside class="sidebar">
+    <div id="miniMonth" class="mini-month"></div>
+    <div class="side-head">My calendars</div>
+    <div id="calendarList"></div>
   </aside>
-</main>
+  <main id="mainView" class="main"></main>
+</div>
+
+<div id="eventModal" class="modal" hidden>
+  <div class="modal-card">
+    <h2 id="evModalTitle">New event</h2>
+    <form id="eventForm">
+      <div class="form-row">
+        <label for="evTitle">Title</label>
+        <input id="evTitle" type="text" maxlength="140" required placeholder="Event title">
+      </div>
+      <div class="form-row">
+        <label for="evCalendar">Calendar</label>
+        <select id="evCalendar"></select>
+      </div>
+      <div class="form-row form-grid">
+        <div>
+          <label for="evDate">Date</label>
+          <input id="evDate" type="date">
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <label class="check"><input id="evAllDay" type="checkbox"> All day</label>
+        </div>
+      </div>
+      <div class="form-row form-grid">
+        <div>
+          <label for="evStart">Starts</label>
+          <input id="evStart" type="time">
+        </div>
+        <div>
+          <label for="evEnd">Ends</label>
+          <input id="evEnd" type="time">
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="evLocation">Location</label>
+        <input id="evLocation" type="text" maxlength="200" placeholder="Add location">
+      </div>
+      <div class="form-row">
+        <label for="evNotes">Notes</label>
+        <textarea id="evNotes" rows="3" maxlength="2000" placeholder="Add notes"></textarea>
+      </div>
+      <div class="form-row form-grid">
+        <div>
+          <label for="evReminder">Reminder</label>
+          <select id="evReminder">
+            <option value="">None</option>
+            <option value="5">5 minutes before</option>
+            <option value="15">15 minutes before</option>
+            <option value="30">30 minutes before</option>
+            <option value="60">1 hour before</option>
+            <option value="1440">1 day before</option>
+          </select>
+        </div>
+        <div>
+          <label for="evRepeat">Repeat</label>
+          <select id="evRepeat">
+            <option value="none">Does not repeat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row form-grid">
+        <div>
+          <label for="evRepeatInterval">Every</label>
+          <input id="evRepeatInterval" type="number" min="1" max="99" value="1">
+        </div>
+        <div>
+          <label for="evRepeatUntil">Until</label>
+          <input id="evRepeatUntil" type="date">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="evDelete" type="button" class="danger">Delete</button>
+        <span class="spacer"></span>
+        <button id="evCancel" type="button">Cancel</button>
+        <button id="evSave" type="submit" class="primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="detailModal" class="modal" hidden>
+  <div class="modal-card">
+    <div id="detBody"></div>
+    <div class="modal-actions">
+      <button id="detDelete" type="button" class="danger">Delete</button>
+      <span class="spacer"></span>
+      <button id="detClose" type="button">Close</button>
+      <button id="detEdit" type="button" class="primary">Edit</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

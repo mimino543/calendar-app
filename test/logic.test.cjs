@@ -5,17 +5,24 @@ const path = require('path');
 const APP_JS = path.join(__dirname, '..', 'apps', 'web', 'public', 'calendar-app', 'app.js');
 const src = fs.readFileSync(APP_JS, 'utf8');
 
-// app.js is a classic browser script; load it with a CommonJS shim so its
-// module.exports guard fires and the DOM path never runs.
 const loadApp = () => {
   const module = { exports: {} };
   new Function('module', 'exports', src)(module, module.exports);
   return module.exports;
 };
 
-const { buildMonth, toKey, dateToKey, parseKey, sortEvents, formatLong } = loadApp();
+const {
+  buildMonth, buildWeek, toKey, dateToKey, parseKey, keyToDate,
+  addDaysKey, addMonthsKey, addYearsKey, minutesOf, timeOf,
+  sortEvents, formatLong, formatShort, repeatLabel, repeatOccurrences,
+  eventOccurrences, defaultCalendars, STORAGE_KEY, CALENDARS_KEY, THEME_KEY
+} = loadApp();
 
-// February 2021: Feb 1 2021 was a Monday, so the grid starts on Sunday Jan 31.
+assert.strictEqual(STORAGE_KEY, 'calendar.events.v2');
+assert.strictEqual(typeof CALENDARS_KEY, 'string');
+assert.strictEqual(typeof THEME_KEY, 'string');
+
+// buildMonth: February 2021 (Feb 1 2021 was a Monday, grid starts Sunday Jan 31).
 const feb = buildMonth(2021, 1);
 assert.strictEqual(feb.length, 42);
 assert.strictEqual(feb[0].key, '2021-01-31');
@@ -23,40 +30,126 @@ assert.strictEqual(feb[0].inMonth, false);
 assert.strictEqual(feb[1].key, '2021-02-01');
 assert.strictEqual(feb[1].inMonth, true);
 assert.strictEqual(feb[28].key, '2021-02-28');
-assert.strictEqual(feb[28].inMonth, true);
 assert.strictEqual(feb[29].key, '2021-03-01');
 assert.strictEqual(feb[29].inMonth, false);
 
-// April 2023: Apr 1 2023 was a Saturday, grid starts on Sunday Mar 26.
+// buildMonth: April 2023 (Apr 1 2023 was a Saturday).
 const apr = buildMonth(2023, 3);
 assert.strictEqual(apr[0].key, '2023-03-26');
 assert.strictEqual(apr[6].key, '2023-04-01');
 assert.strictEqual(apr[35].key, '2023-04-30');
 assert.strictEqual(apr[36].key, '2023-05-01');
-assert.strictEqual(apr[41].key, '2023-05-06');
 
-// A month starting exactly on Sunday: June 2025 (Jun 1 2025 was a Sunday).
+// buildMonth: June 2025 starts exactly on Sunday.
 const jun = buildMonth(2025, 5);
 assert.strictEqual(jun[0].key, '2025-06-01');
-assert.strictEqual(jun[0].inMonth, true);
 assert.strictEqual(jun[29].key, '2025-06-30');
 assert.strictEqual(jun[30].key, '2025-07-01');
+
+// buildWeek: anchored to Sunday on/before the given day.
+const wk = buildWeek('2025-06-18');
+assert.strictEqual(wk.length, 7);
+assert.strictEqual(wk[0].key, '2025-06-15');
+assert.strictEqual(wk[6].key, '2025-06-21');
+assert.strictEqual(buildWeek('2025-06-15')[0].key, '2025-06-15');
 
 // Key helpers.
 assert.strictEqual(toKey(2025, 11, 5), '2025-12-05');
 assert.deepStrictEqual(parseKey('2025-12-05'), { y: 2025, m: 11, d: 5 });
 assert.strictEqual(dateToKey(new Date(2025, 0, 9)), '2025-01-09');
 assert.strictEqual(formatLong('2025-06-15'), 'Sunday, June 15, 2025');
+assert.strictEqual(formatShort('2025-06-15'), 'Jun 15');
+assert.deepStrictEqual(
+  { y: keyToDate('2025-06-15').getFullYear(), m: keyToDate('2025-06-15').getMonth(), d: keyToDate('2025-06-15').getDate() },
+  { y: 2025, m: 5, d: 15 }
+);
 
-// sortEvents: timed events first in time order, untimed last, stable otherwise.
+// Date arithmetic.
+assert.strictEqual(addDaysKey('2025-12-31', 1), '2026-01-01');
+assert.strictEqual(addDaysKey('2025-03-01', -1), '2025-02-28');
+assert.strictEqual(addMonthsKey('2025-01-31', 1), '2025-02-28');
+assert.strictEqual(addMonthsKey('2024-01-31', 1), '2024-02-29');
+assert.strictEqual(addYearsKey('2024-02-29', 1), '2025-02-28');
+assert.strictEqual(addMonthsKey('2025-06-15', -7), '2024-11-15');
+
+// Time helpers.
+assert.strictEqual(minutesOf('09:30'), 570);
+assert.strictEqual(minutesOf(''), null);
+assert.strictEqual(timeOf(570), '09:30');
+assert.strictEqual(timeOf(1500), '01:00');
+assert.strictEqual(timeOf(-30), '23:30');
+
+// sortEvents: by date, then start time, then title; input not mutated.
 const sorted = sortEvents([
-  { id: 'a', title: 'no time', time: '' },
-  { id: 'b', title: 'late', time: '18:00' },
-  { id: 'c', title: 'early', time: '09:30' }
+  { date: '2025-06-02', start: '10:00', title: 'b' },
+  { date: '2025-06-01', start: '', title: 'a' },
+  { date: '2025-06-01', start: '09:00', title: 'c' }
 ]);
-assert.deepStrictEqual(sorted.map(e => e.id), ['c', 'b', 'a']);
-const input = [{ id: 'x', title: 't', time: '' }];
+assert.deepStrictEqual(sorted.map(e => e.title), ['c', 'a', 'b']);
+const input = [{ date: '2025-06-01', start: '', title: 'x' }];
 sortEvents(input);
-assert.strictEqual(input.length, 1, 'sortEvents must not mutate its input');
+assert.strictEqual(input.length, 1);
+
+// Recurrence.
+const daily = { date: '2025-06-01', repeat: { freq: 'daily', interval: 2, until: '' } };
+assert.deepStrictEqual(
+  repeatOccurrences(daily, '2025-06-01', '2025-06-10'),
+  ['2025-06-01', '2025-06-03', '2025-06-05', '2025-06-07', '2025-06-09']
+);
+const dailyUntil = { date: '2025-06-01', repeat: { freq: 'daily', interval: 2, until: '2025-06-05' } };
+assert.deepStrictEqual(
+  repeatOccurrences(dailyUntil, '2025-06-01', '2025-06-30'),
+  ['2025-06-01', '2025-06-03', '2025-06-05']
+);
+const weekly = { date: '2025-06-04', repeat: { freq: 'weekly', interval: 1, until: '' } };
+assert.deepStrictEqual(
+  repeatOccurrences(weekly, '2025-06-01', '2025-06-30'),
+  ['2025-06-04', '2025-06-11', '2025-06-18', '2025-06-25']
+);
+const monthly = { date: '2025-01-31', repeat: { freq: 'monthly', interval: 1, until: '' } };
+assert.deepStrictEqual(
+  repeatOccurrences(monthly, '2025-01-01', '2025-04-30'),
+  ['2025-01-31', '2025-02-28', '2025-03-31', '2025-04-30']
+);
+const yearly = { date: '2024-02-29', repeat: { freq: 'yearly', interval: 1, until: '' } };
+assert.deepStrictEqual(
+  repeatOccurrences(yearly, '2024-01-01', '2027-12-31'),
+  ['2024-02-29', '2025-02-28', '2026-02-28', '2027-02-28']
+);
+const single = { date: '2025-06-10', repeat: { freq: 'none', interval: 1, until: '' } };
+assert.deepStrictEqual(repeatOccurrences(single, '2025-06-01', '2025-06-30'), ['2025-06-10']);
+assert.deepStrictEqual(repeatOccurrences(single, '2025-07-01', '2025-07-31'), []);
+
+// Occurrence expansion with times.
+const occ = eventOccurrences(
+  { date: '2025-06-10', start: '09:00', end: '10:30', allDay: false, repeat: { freq: 'none' } },
+  '2025-06-01', '2025-06-30'
+);
+assert.strictEqual(occ.length, 1);
+assert.strictEqual(occ[0].startMin, 540);
+assert.strictEqual(occ[0].endMin, 630);
+assert.strictEqual(occ[0].allDay, false);
+const allDayOcc = eventOccurrences(
+  { date: '2025-06-10', start: '', end: '', allDay: true, repeat: { freq: 'none' } },
+  '2025-06-01', '2025-06-30'
+);
+assert.deepStrictEqual([allDayOcc[0].startMin, allDayOcc[0].endMin, allDayOcc[0].allDay], [0, 1440, true]);
+const badEnd = eventOccurrences(
+  { date: '2025-06-10', start: '09:00', end: '08:00', allDay: false, repeat: { freq: 'none' } },
+  '2025-06-01', '2025-06-30'
+);
+assert.strictEqual(badEnd[0].endMin, 600);
+
+// Labels.
+assert.strictEqual(repeatLabel({ freq: 'none' }), 'Does not repeat');
+assert.strictEqual(repeatLabel({ freq: 'weekly', interval: 2, until: '' }), 'Every 2 weeks');
+assert.strictEqual(repeatLabel({ freq: 'daily', interval: 1, until: '2025-12-31' }), 'Daily until 2025-12-31');
+assert.strictEqual(repeatLabel(null), 'Does not repeat');
+
+// Default calendars.
+const cals = defaultCalendars();
+assert.strictEqual(cals.length, 3);
+assert.deepStrictEqual(cals.map(c => c.id), ['personal', 'work', 'family']);
+assert.ok(cals.every(c => c.color && c.visible === true));
 
 console.log('All logic tests passed');

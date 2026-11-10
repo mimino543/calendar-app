@@ -12,7 +12,7 @@ const loadApp = () => {
   new Function('module', 'exports', src)(module, module.exports);
   return module.exports;
 };
-const { STORAGE_KEY, buildMonth, dateToKey } = loadApp();
+const { STORAGE_KEY, THEME_KEY, dateToKey, repeatOccurrences } = loadApp();
 
 function makeEl() {
   const el = {
@@ -20,7 +20,12 @@ function makeEl() {
     className: '',
     textContent: '',
     dataset: {},
+    style: {},
     value: '',
+    checked: false,
+    hidden: false,
+    disabled: false,
+    type: '',
     appendChild(c) { this.children.push(c); return c; },
     addEventListener(type, fn) { (this._handlers = this._handlers || {})[type] = fn; },
     setAttribute() {},
@@ -34,20 +39,31 @@ function makeEl() {
   return el;
 }
 
-const ids = ['prevBtn', 'todayBtn', 'nextBtn', 'monthTitle', 'grid', 'agendaDate', 'eventForm', 'titleInput', 'timeInput', 'agendaList'];
+const ids = [
+  'viewLabel', 'prevBtn', 'todayBtn', 'nextBtn', 'newEventBtn', 'themeToggle',
+  'viewMonth', 'viewWeek', 'viewDay', 'viewAgenda',
+  'miniMonth', 'calendarList', 'mainView',
+  'eventModal', 'evModalTitle', 'eventForm', 'evTitle', 'evCalendar', 'evDate',
+  'evAllDay', 'evStart', 'evEnd', 'evLocation', 'evNotes', 'evReminder',
+  'evRepeat', 'evRepeatInterval', 'evRepeatUntil', 'evDelete', 'evCancel',
+  'detailModal', 'detBody', 'detEdit', 'detDelete', 'detClose'
+];
 const els = {};
 ids.forEach(id => { els[id] = makeEl(); });
 
 const store = {};
+const documentElement = makeEl();
 const sandbox = {
   document: {
     getElementById: id => els[id],
     createElement: () => makeEl(),
-    addEventListener: () => {}
+    addEventListener: () => {},
+    documentElement
   },
   localStorage: {
     getItem: k => (k in store ? store[k] : null),
-    setItem: (k, v) => { store[k] = String(v); }
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: k => { delete store[k]; }
   },
   crypto: webcrypto,
   console
@@ -55,52 +71,107 @@ const sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox);
 
+function findAll(node, cls, out) {
+  out = out || [];
+  (node.children || []).forEach(c => {
+    if (c.className && c.className.split(' ').indexOf(cls) !== -1) out.push(c);
+    findAll(c, cls, out);
+  });
+  return out;
+}
+function texts(node, out) {
+  out = out || [];
+  if (node.textContent) out.push(node.textContent);
+  (node.children || []).forEach(c => texts(c, out));
+  return out;
+}
+
 const now = new Date();
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-assert.strictEqual(els.monthTitle.textContent, MONTHS[now.getMonth()] + ' ' + now.getFullYear());
-assert.strictEqual(els.grid.children.length, 7 + 42, '7 weekday headers + 42 day cells');
-assert.strictEqual(els.grid.children[0].className, 'weekday');
-
 const today = dateToKey(now);
-const todayCell = els.grid.children.slice(7).find(c => c.dataset.key === today);
-assert.ok(todayCell, 'today cell exists');
-assert.ok(todayCell.className.includes('today'), 'today is highlighted');
-assert.ok(todayCell.className.includes('selected'), 'today is selected by default');
-assert.ok(els.agendaDate.textContent.includes(MONTHS[now.getMonth()]), 'agenda shows today');
-assert.strictEqual(els.agendaList.children.length, 1);
-assert.strictEqual(els.agendaList.children[0].className, 'empty');
+const labelNow = MONTHS[now.getMonth()] + ' ' + now.getFullYear();
 
-els.titleInput.value = 'Team sync';
-els.timeInput.value = '09:30';
-els.eventForm._handlers.submit({ preventDefault() {} });
+assert.strictEqual(els.viewLabel.textContent, labelNow, 'month label on load');
+assert.strictEqual(els.mainView.children[0].className, 'month-grid');
+assert.strictEqual(els.mainView.children[0].children.length, 7 + 42, 'month grid renders 7 headers + 42 cells');
+assert.strictEqual(els.calendarList.children.length, 3, 'three default calendars listed');
+assert.strictEqual(els.miniMonth.children.length, 2, 'mini month head + grid');
+assert.strictEqual(els.viewMonth.className, 'view-btn active');
 
-const saved = JSON.parse(store[STORAGE_KEY]);
-assert.strictEqual(saved[today].length, 1);
-assert.strictEqual(saved[today][0].title, 'Team sync');
-assert.strictEqual(saved[today][0].time, '09:30');
-assert.strictEqual(els.titleInput.value, '', 'form clears after add');
+els.viewWeek._handlers.click();
+assert.strictEqual(els.mainView.children[0].className, 'week-wrap', 'week view renders');
+assert.ok(els.viewLabel.textContent.indexOf('–') !== -1, 'week label shows a range');
+assert.strictEqual(els.viewWeek.className, 'view-btn active');
 
-const cellAfterAdd = els.grid.children.slice(7).find(c => c.dataset.key === today);
-const chip = cellAfterAdd.children.find(c => c.className === 'event');
-assert.ok(chip, 'event chip rendered on the day cell');
-assert.strictEqual(chip.textContent, '09:30 Team sync');
-
-assert.strictEqual(els.agendaList.children.length, 1, 'agenda lists the event');
-assert.strictEqual(els.agendaList.children[0].children[1].textContent, 'Team sync');
+els.viewMonth._handlers.click();
+assert.strictEqual(els.mainView.children[0].className, 'month-grid');
 
 const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 els.nextBtn._handlers.click();
-assert.strictEqual(els.monthTitle.textContent, MONTHS[next.getMonth()] + ' ' + next.getFullYear(), 'next month');
+assert.strictEqual(els.viewLabel.textContent, MONTHS[next.getMonth()] + ' ' + next.getFullYear(), 'next month');
 els.prevBtn._handlers.click();
-assert.strictEqual(els.monthTitle.textContent, MONTHS[now.getMonth()] + ' ' + now.getFullYear(), 'back to current month');
+assert.strictEqual(els.viewLabel.textContent, labelNow, 'back to current month');
+els.nextBtn._handlers.click();
+els.todayBtn._handlers.click();
+assert.strictEqual(els.viewLabel.textContent, labelNow, 'today button returns to current month');
 
-const delBtn = els.agendaList.children[0].children[2];
-assert.strictEqual(delBtn.className, 'ev-del');
-delBtn._handlers.click();
-assert.ok(!(today in JSON.parse(store[STORAGE_KEY])), 'event removed from storage');
-assert.strictEqual(els.agendaList.children[0].className, 'empty', 'agenda back to empty state');
+els.newEventBtn._handlers.click();
+assert.strictEqual(els.eventModal.hidden, false, 'event modal opens');
+assert.strictEqual(els.evModalTitle.textContent, 'New event');
+assert.strictEqual(els.evDate.value, today, 'new event defaults to selected day');
+assert.strictEqual(els.evCalendar.children.length, 3, 'calendar options rebuilt');
 
-assert.strictEqual(buildMonth(now.getFullYear(), now.getMonth()).length, 42);
+els.evTitle.value = 'Team sync';
+els.evStart.value = '09:00';
+els.evEnd.value = '10:00';
+els.evRepeat.value = 'weekly';
+els.eventForm._handlers.submit({ preventDefault() {} });
+assert.strictEqual(els.eventModal.hidden, true, 'modal closes after save');
+
+let saved = JSON.parse(store[STORAGE_KEY]);
+assert.strictEqual(saved.length, 1);
+assert.strictEqual(saved[0].title, 'Team sync');
+assert.strictEqual(saved[0].start, '09:00');
+assert.strictEqual(saved[0].end, '10:00');
+assert.strictEqual(saved[0].repeat.freq, 'weekly');
+assert.strictEqual(saved[0].date, today);
+
+const chip = findAll(els.mainView, 'chip').find(c => c.textContent.indexOf('Team sync') !== -1);
+assert.ok(chip, 'event chip rendered in month grid');
+
+chip._handlers.click({ stopPropagation() {} });
+assert.strictEqual(els.detailModal.hidden, false, 'detail modal opens from chip');
+const detText = texts(els.detBody).join(' ');
+assert.ok(detText.indexOf('Team sync') !== -1, 'detail shows title');
+assert.ok(detText.indexOf('Weekly') !== -1, 'detail shows recurrence');
+
+els.detDelete._handlers.click();
+saved = JSON.parse(store[STORAGE_KEY]);
+assert.strictEqual(saved.length, 0, 'event deleted');
+assert.strictEqual(els.detailModal.hidden, true, 'detail modal closes after delete');
+
+els.newEventBtn._handlers.click();
+els.evTitle.value = 'Day off';
+els.evAllDay.checked = true;
+els.evAllDay._handlers.change();
+assert.strictEqual(els.evStart.disabled, true, 'time fields disabled for all-day');
+els.eventForm._handlers.submit({ preventDefault() {} });
+saved = JSON.parse(store[STORAGE_KEY]);
+assert.strictEqual(saved.length, 1);
+assert.strictEqual(saved[0].allDay, true);
+assert.strictEqual(saved[0].start, '');
+
+els.viewAgenda._handlers.click();
+assert.strictEqual(els.mainView.children[0].className, 'agenda-wrap', 'agenda view renders');
+assert.ok(findAll(els.mainView, 'ag-row').length >= 1, 'agenda lists the all-day event');
+
+els.themeToggle._handlers.click();
+assert.strictEqual(documentElement.dataset.theme, 'light', 'theme toggles to light');
+assert.strictEqual(store[THEME_KEY], '"light"', 'theme persisted');
+
+assert.deepStrictEqual(
+  repeatOccurrences({ date: '2025-06-02', repeat: { freq: 'weekly', interval: 1, until: '' } }, '2025-06-01', '2025-06-30'),
+  ['2025-06-02', '2025-06-09', '2025-06-16', '2025-06-23', '2025-06-30']
+);
 
 console.log('Smoke test passed');
