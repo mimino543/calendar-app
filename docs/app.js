@@ -246,12 +246,16 @@
     viewAgenda: document.getElementById('viewAgenda'),
     miniMonth: document.getElementById('miniMonth'),
     calendarList: document.getElementById('calendarList'),
+    newCalName: document.getElementById('newCalName'),
+    newCalColor: document.getElementById('newCalColor'),
+    addCalBtn: document.getElementById('addCalBtn'),
     mainView: document.getElementById('mainView'),
     eventModal: document.getElementById('eventModal'),
     evModalTitle: document.getElementById('evModalTitle'),
     eventForm: document.getElementById('eventForm'),
     evTitle: document.getElementById('evTitle'),
     evCalendar: document.getElementById('evCalendar'),
+    evCalDot: document.getElementById('evCalDot'),
     evDate: document.getElementById('evDate'),
     evAllDay: document.getElementById('evAllDay'),
     evStart: document.getElementById('evStart'),
@@ -399,22 +403,56 @@
     els.calendarList.innerHTML = '';
     calendars.forEach(function (c, i) {
       var row = el('div', 'cal-item');
-      var dot = el('span', 'cal-dot');
-      dot.style.background = c.color;
+      var swatch = el('input', 'cal-swatch');
+      swatch.type = 'color';
+      swatch.value = c.color;
+      swatch.title = 'Change color';
+      swatch.addEventListener('change', function () {
+        calendars[i].color = swatch.value;
+        saveJSON(CALENDARS_KEY, calendars);
+        render();
+      });
       var name = el('span', 'cal-name', c.name);
       var toggle = el('input');
       toggle.type = 'checkbox';
       toggle.checked = c.visible !== false;
+      toggle.title = 'Show/hide';
       toggle.addEventListener('change', function () {
         calendars[i].visible = toggle.checked;
         saveJSON(CALENDARS_KEY, calendars);
         render();
       });
-      row.appendChild(dot);
+      row.appendChild(swatch);
       row.appendChild(name);
       row.appendChild(toggle);
+      if (calendars.length > 1) {
+        var del = el('button', 'cal-del', '×');
+        del.type = 'button';
+        del.title = 'Delete calendar';
+        del.addEventListener('click', function () { deleteCalendar(c.id); });
+        row.appendChild(del);
+      }
       els.calendarList.appendChild(row);
     });
+  }
+
+  function addCalendar() {
+    var name = (els.newCalName.value || '').trim();
+    if (!name) return;
+    calendars.push({ id: uid(), name: name, color: els.newCalColor.value || '#6d5ae0', visible: true });
+    els.newCalName.value = '';
+    saveJSON(CALENDARS_KEY, calendars);
+    render();
+  }
+
+  function deleteCalendar(id) {
+    if (calendars.length <= 1) return;
+    calendars = calendars.filter(function (c) { return c.id !== id; });
+    var fallback = calendars[0].id;
+    events.forEach(function (ev) { if (ev.calendarId === id) ev.calendarId = fallback; });
+    saveJSON(CALENDARS_KEY, calendars);
+    saveJSON(STORAGE_KEY, events);
+    render();
   }
 
   function renderMain() {
@@ -587,12 +625,18 @@
   function rebuildCalendarOptions(selectedId) {
     els.evCalendar.innerHTML = '';
     calendars.forEach(function (c) {
-      var o = el('option', '', '● ' + c.name);
+      var o = el('option', '', c.name);
       o.value = c.id;
       o.style.color = c.color;
       els.evCalendar.appendChild(o);
     });
     els.evCalendar.value = selectedId || (calendars[0] && calendars[0].id);
+    updateCalDot();
+  }
+
+  function updateCalDot() {
+    var c = calendarById(els.evCalendar.value);
+    if (c) els.evCalDot.style.background = c.color;
   }
 
   function updateTimeFields() {
@@ -732,6 +776,14 @@
   els.viewAgenda.addEventListener('click', function () { setView('agenda'); });
   els.eventForm.addEventListener('submit', onSave);
   els.evAllDay.addEventListener('change', updateTimeFields);
+  els.evCalendar.addEventListener('change', updateCalDot);
+  els.addCalBtn.addEventListener('click', addCalendar);
+  els.newCalName.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      if (e.preventDefault) e.preventDefault();
+      addCalendar();
+    }
+  });
   els.evCancel.addEventListener('click', closeModals);
   els.evDelete.addEventListener('click', function () { if (state.editing) deleteEvent(state.editing.id); });
   els.detEdit.addEventListener('click', function () {

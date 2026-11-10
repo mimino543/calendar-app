@@ -12,7 +12,7 @@ const loadApp = () => {
   new Function('module', 'exports', src)(module, module.exports);
   return module.exports;
 };
-const { STORAGE_KEY, THEME_KEY, dateToKey, repeatOccurrences } = loadApp();
+const { STORAGE_KEY, CALENDARS_KEY, THEME_KEY, dateToKey, repeatOccurrences } = loadApp();
 
 function makeEl() {
   const el = {
@@ -26,6 +26,7 @@ function makeEl() {
     hidden: false,
     disabled: false,
     type: '',
+    title: '',
     appendChild(c) { this.children.push(c); return c; },
     addEventListener(type, fn) { (this._handlers = this._handlers || {})[type] = fn; },
     setAttribute() {},
@@ -42,8 +43,8 @@ function makeEl() {
 const ids = [
   'viewLabel', 'prevBtn', 'todayBtn', 'nextBtn', 'newEventBtn', 'themeToggle',
   'viewMonth', 'viewWeek', 'viewDay', 'viewAgenda',
-  'miniMonth', 'calendarList', 'mainView',
-  'eventModal', 'evModalTitle', 'eventForm', 'evTitle', 'evCalendar', 'evDate',
+  'miniMonth', 'calendarList', 'newCalName', 'newCalColor', 'addCalBtn', 'mainView',
+  'eventModal', 'evModalTitle', 'eventForm', 'evTitle', 'evCalendar', 'evCalDot', 'evDate',
   'evAllDay', 'evStart', 'evEnd', 'evLocation', 'evNotes', 'evReminder',
   'evRepeat', 'evRepeatInterval', 'evRepeatUntil', 'evDelete', 'evCancel',
   'detailModal', 'detBody', 'detEdit', 'detDelete', 'detClose'
@@ -120,6 +121,8 @@ assert.strictEqual(els.eventModal.hidden, false, 'event modal opens');
 assert.strictEqual(els.evModalTitle.textContent, 'New event');
 assert.strictEqual(els.evDate.value, today, 'new event defaults to selected day');
 assert.strictEqual(els.evCalendar.children.length, 3, 'calendar options rebuilt');
+assert.strictEqual(els.evCalendar.children[0].textContent, 'Personal', 'option text is the plain name');
+assert.strictEqual(els.evCalDot.style.background, '#6d5ae0', 'dot shows the selected calendar color');
 
 els.evTitle.value = 'Team sync';
 els.evStart.value = '09:00';
@@ -149,6 +152,39 @@ els.detDelete._handlers.click();
 saved = JSON.parse(store[STORAGE_KEY]);
 assert.strictEqual(saved.length, 0, 'event deleted');
 assert.strictEqual(els.detailModal.hidden, true, 'detail modal closes after delete');
+
+els.newCalName.value = 'Trips';
+els.newCalColor.value = '#ff0000';
+els.addCalBtn._handlers.click();
+assert.strictEqual(els.calendarList.children.length, 4, 'calendar added to sidebar');
+let cals = JSON.parse(store[CALENDARS_KEY]);
+assert.strictEqual(cals.length, 4);
+assert.strictEqual(cals[3].name, 'Trips');
+assert.strictEqual(cals[3].color, '#ff0000');
+const tripsId = cals[3].id;
+
+els.newEventBtn._handlers.click();
+assert.strictEqual(els.evCalendar.children.length, 4, 'event modal lists the new calendar');
+els.evCalendar.value = tripsId;
+els.evCalendar._handlers.change();
+assert.strictEqual(els.evCalDot.style.background, '#ff0000', 'dot follows the selected calendar');
+els.evCancel._handlers.click();
+
+const row0 = els.calendarList.children[0];
+const swatch = row0.children[0];
+swatch.value = '#123456';
+swatch._handlers.change();
+cals = JSON.parse(store[CALENDARS_KEY]);
+assert.strictEqual(cals[0].color, '#123456', 'recolor persisted');
+
+const tripsRow = els.calendarList.children[3];
+const delBtn = tripsRow.children[3];
+assert.strictEqual(delBtn.className, 'cal-del');
+delBtn._handlers.click();
+assert.strictEqual(els.calendarList.children.length, 3, 'calendar deleted from sidebar');
+cals = JSON.parse(store[CALENDARS_KEY]);
+assert.strictEqual(cals.length, 3);
+assert.ok(!cals.some(c => c.id === tripsId), 'deleted calendar gone from storage');
 
 els.newEventBtn._handlers.click();
 els.evTitle.value = 'Day off';

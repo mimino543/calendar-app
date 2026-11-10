@@ -501,6 +501,58 @@ input:disabled { opacity: 0.5; }
 
 .det-notes { white-space: pre-wrap; color: var(--muted); }
 
+.cal-select-row { display: flex; align-items: center; gap: 8px; }
+.cal-select-row select { flex: 1; }
+
+.cal-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+  flex: none;
+}
+
+.cal-del {
+  padding: 1px 7px;
+  font-size: 13px;
+  line-height: 1.4;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+}
+
+.cal-del:hover { color: var(--danger); background: var(--panel2); }
+
+.cal-add {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.cal-add input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.cal-add input[type="color"] {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  flex: none;
+}
+
+.cal-add button { padding: 5px 10px; flex: none; }
+
 @media (max-width: 900px) {
   .sidebar { display: none; }
   .m-cell { min-height: 70px; }
