@@ -28,6 +28,23 @@
   --now: #e03131;
 }
 
+:root[data-theme="light"] .sidebar {
+  background: #1e1d29;
+  border-right-color: #35334a;
+  color: #eceaf4;
+}
+
+:root[data-theme="light"] .sidebar .side-head,
+:root[data-theme="light"] .sidebar .mm-wd,
+:root[data-theme="light"] .sidebar .mm-cell.outside,
+:root[data-theme="light"] .sidebar .cal-del { color: #9b98ad; }
+
+:root[data-theme="light"] .sidebar .mm-cell:hover,
+:root[data-theme="light"] .sidebar .cal-item:hover,
+:root[data-theme="light"] .sidebar .cal-del:hover { background: #282639; }
+
+:root[data-theme="light"] .sidebar .cal-del:hover { color: #e5534b; }
+
 * { box-sizing: border-box; }
 
 html, body { height: 100%; }
@@ -295,20 +312,20 @@ button:hover { filter: brightness(1.15); }
   text-transform: uppercase;
 }
 
-.wg-day-h .wg-num { font-size: 18px; font-weight: 600; }
-
-.wg-day-h.today .wg-num {
+.wg-day-h .wg-num {
   display: inline-flex;
   width: 30px;
   height: 30px;
   align-items: center;
   justify-content: center;
-  background: var(--today);
-  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
   border-radius: 50%;
 }
 
-.wg-day-h.selected .wg-num { outline: 2px solid var(--accent); border-radius: 50%; }
+.wg-day-h.today .wg-num { background: var(--today); color: #fff; }
+
+.wg-day-h.selected .wg-num { background: var(--accent); color: #fff; }
 
 .wg-allday-cell {
   min-height: 28px;
@@ -570,8 +587,8 @@ input:disabled { opacity: 0.5; }
 }
 
 .cal-color-pop {
-  position: absolute;
-  z-index: 20;
+  position: fixed;
+  z-index: 100;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
