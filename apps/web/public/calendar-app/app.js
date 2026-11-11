@@ -8,7 +8,7 @@
 
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   var MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  var WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   var WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   var HOUR_H = 48;
@@ -32,7 +32,7 @@
 
   function buildMonth(year, month) {
     var first = new Date(year, month, 1);
-    var start = new Date(year, month, 1 - first.getDay());
+    var start = new Date(year, month, 1 - ((first.getDay() + 6) % 7));
     var cells = [];
     for (var i = 0; i < 42; i++) {
       var dt = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
@@ -43,7 +43,7 @@
 
   function buildWeek(anchorKey) {
     var d = keyToDate(anchorKey);
-    var start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
+    var start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
     var cells = [];
     for (var i = 0; i < 7; i++) {
       var dt = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
@@ -405,6 +405,8 @@
   var pendingColor = '#6d5ae0';
   var paletteTarget = null;
   var pendingDeleteId = null;
+  var renamingId = null;
+  var urlStatusTimer = null;
 
   var els = {
     viewLabel: document.getElementById('viewLabel'),
@@ -601,7 +603,12 @@
         togglePalette({ mode: 'cal', id: c.id }, swatch);
       });
       var name = el('span', 'cal-name', c.name);
-      if (c.url) name.title = 'Subscribed from ' + c.url;
+      name.title = 'Click to rename' + (c.url ? ' (subscribed from ' + c.url + ')' : '');
+      name.addEventListener('click', function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        renamingId = c.id;
+        render();
+      });
       var toggle = el('input');
       toggle.type = 'checkbox';
       toggle.checked = c.visible !== false;
@@ -612,7 +619,27 @@
         render();
       });
       row.appendChild(swatch);
-      row.appendChild(name);
+      if (renamingId === c.id) {
+        var input = el('input', 'cal-name-input');
+        input.type = 'text';
+        input.maxLength = 40;
+        input.value = c.name;
+        input.addEventListener('click', function (e) { if (e && e.stopPropagation) e.stopPropagation(); });
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            if (e.preventDefault) e.preventDefault();
+            commitRename(c, input);
+          } else if (e.key === 'Escape') {
+            renamingId = null;
+            render();
+          }
+        });
+        input.addEventListener('blur', function () { commitRename(c, input); });
+        row.appendChild(input);
+        if (input.focus) input.focus();
+      } else {
+        row.appendChild(name);
+      }
       row.appendChild(toggle);
       if (c.url) {
         var ref = el('button', 'cal-refresh', '↻');
@@ -646,9 +673,21 @@
 
   function setUrlStatus(msg, isError) {
     if (!els.calUrlStatus) return;
+    if (urlStatusTimer && typeof clearTimeout === 'function') clearTimeout(urlStatusTimer);
+    urlStatusTimer = null;
     els.calUrlStatus.textContent = msg || '';
     els.calUrlStatus.hidden = !msg;
     els.calUrlStatus.className = 'cal-url-status' + (isError ? ' error' : '');
+    if (msg && typeof setTimeout === 'function') {
+      urlStatusTimer = setTimeout(function () {
+        els.calUrlStatus.className += ' fade';
+        urlStatusTimer = setTimeout(function () {
+          els.calUrlStatus.hidden = true;
+          els.calUrlStatus.className = 'cal-url-status' + (isError ? ' error' : '');
+          urlStatusTimer = null;
+        }, 600);
+      }, 3000);
+    }
   }
 
   function urlHost(url) {
@@ -728,6 +767,17 @@
       setUrlStatus('Could not load calendar: ' + (err && err.message ? err.message : err)
         + '. The server must allow cross-origin requests (CORS).', true);
     });
+  }
+
+  function commitRename(c, input) {
+    if (renamingId !== c.id) return;
+    renamingId = null;
+    var name = (input.value || '').trim();
+    if (name && name !== c.name) {
+      c.name = name;
+      saveJSON(CALENDARS_KEY, calendars);
+    }
+    render();
   }
 
   function requestDeleteCalendar(id) {
@@ -897,7 +947,7 @@
       var h = el('div', 'wg-day-h'
         + (d.key === today ? ' today' : '')
         + (d.key === state.selected ? ' selected' : ''));
-      h.appendChild(el('div', 'wg-wd', WEEKDAYS[d.date.getDay()]));
+      h.appendChild(el('div', 'wg-wd', WEEKDAYS[(d.date.getDay() + 6) % 7]));
       h.appendChild(el('div', 'wg-num', String(d.date.getDate())));
       h.addEventListener('click', function () {
         state.cursor = d.key;

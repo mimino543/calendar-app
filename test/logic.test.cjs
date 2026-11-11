@@ -25,36 +25,39 @@ assert.strictEqual(STORAGE_KEY, 'calendar.events.v2');
 assert.strictEqual(typeof CALENDARS_KEY, 'string');
 assert.strictEqual(typeof THEME_KEY, 'string');
 
-// buildMonth: February 2021 (Feb 1 2021 was a Monday, grid starts Sunday Jan 31).
+// buildMonth: weeks start on Monday. February 2021 (Feb 1 2021 was a Monday, grid starts Feb 1).
 const feb = buildMonth(2021, 1);
 assert.strictEqual(feb.length, 42);
-assert.strictEqual(feb[0].key, '2021-01-31');
-assert.strictEqual(feb[0].inMonth, false);
-assert.strictEqual(feb[1].key, '2021-02-01');
-assert.strictEqual(feb[1].inMonth, true);
-assert.strictEqual(feb[28].key, '2021-02-28');
-assert.strictEqual(feb[29].key, '2021-03-01');
-assert.strictEqual(feb[29].inMonth, false);
+assert.strictEqual(feb[0].key, '2021-02-01');
+assert.strictEqual(feb[0].inMonth, true);
+assert.strictEqual(feb[27].key, '2021-02-28');
+assert.strictEqual(feb[27].inMonth, true);
+assert.strictEqual(feb[28].key, '2021-03-01');
+assert.strictEqual(feb[28].inMonth, false);
 
-// buildMonth: April 2023 (Apr 1 2023 was a Saturday).
+// buildMonth: April 2023 (Apr 1 2023 was a Saturday, grid starts Monday Mar 27).
 const apr = buildMonth(2023, 3);
-assert.strictEqual(apr[0].key, '2023-03-26');
-assert.strictEqual(apr[6].key, '2023-04-01');
-assert.strictEqual(apr[35].key, '2023-04-30');
-assert.strictEqual(apr[36].key, '2023-05-01');
+assert.strictEqual(apr[0].key, '2023-03-27');
+assert.strictEqual(apr[0].inMonth, false);
+assert.strictEqual(apr[5].key, '2023-04-01');
+assert.strictEqual(apr[5].inMonth, true);
+assert.strictEqual(apr[34].key, '2023-04-30');
+assert.strictEqual(apr[35].key, '2023-05-01');
 
-// buildMonth: June 2025 starts exactly on Sunday.
+// buildMonth: June 2025 starts on a Sunday, so the Monday-first grid starts May 26.
 const jun = buildMonth(2025, 5);
-assert.strictEqual(jun[0].key, '2025-06-01');
-assert.strictEqual(jun[29].key, '2025-06-30');
-assert.strictEqual(jun[30].key, '2025-07-01');
+assert.strictEqual(jun[0].key, '2025-05-26');
+assert.strictEqual(jun[6].key, '2025-06-01');
+assert.strictEqual(jun[35].key, '2025-06-30');
+assert.strictEqual(jun[36].key, '2025-07-01');
 
-// buildWeek: anchored to Sunday on/before the given day.
+// buildWeek: anchored to the Monday on/before the given day.
 const wk = buildWeek('2025-06-18');
 assert.strictEqual(wk.length, 7);
-assert.strictEqual(wk[0].key, '2025-06-15');
-assert.strictEqual(wk[6].key, '2025-06-21');
-assert.strictEqual(buildWeek('2025-06-15')[0].key, '2025-06-15');
+assert.strictEqual(wk[0].key, '2025-06-16');
+assert.strictEqual(wk[6].key, '2025-06-22');
+assert.strictEqual(buildWeek('2025-06-15')[0].key, '2025-06-09', 'a Sunday belongs to the week that started the previous Monday');
+assert.strictEqual(buildWeek('2025-06-16')[0].key, '2025-06-16', 'a Monday starts its own week');
 
 // Key helpers.
 assert.strictEqual(toKey(2025, 11, 5), '2025-12-05');
@@ -204,8 +207,18 @@ const numRule = css.match(/\.wg-day-h \.wg-num\s*\{([^}]*)\}/);
 assert.ok(numRule && /border-radius:\s*50%/.test(numRule[1]) && /width:\s*30px/.test(numRule[1]),
   'week/day header number renders as a small circle');
 const selRule = css.match(/\.wg-day-h\.selected \.wg-num\s*\{([^}]*)\}/);
-assert.ok(selRule && /background:\s*var\(--accent\)/.test(selRule[1]) && !/outline/.test(selRule[1]),
-  'selected day uses a filled small circle, not a large outline');
+assert.ok(selRule && /outline:\s*2px solid var\(--accent\)/.test(selRule[1]) && !/background:\s*var\(--accent\)/.test(selRule[1]),
+  'selected day is drawn as a ring so it differs from the filled today circle');
+const todayRule = css.match(/\.wg-day-h\.today \.wg-num\s*\{([^}]*)\}/);
+assert.ok(todayRule && /background:\s*var\(--today\)/.test(todayRule[1]), 'today keeps its filled circle');
+
+// The sidebar never scrolls; everything in it stays visible.
+assert.ok(/\.sidebar\s*\{[^}]*overflow:\s*hidden/.test(css), 'sidebar does not scroll');
+
+// The URL status line fades out instead of lingering.
+assert.ok(/\.cal-url-status\s*\{[^}]*transition:[^}]*opacity/.test(css)
+  && /\.cal-url-status\.fade\s*\{[^}]*opacity:\s*0/.test(css),
+  'url status text has a fade-out transition');
 
 // ICS parsing: line unfolding and content-line splitting.
 assert.deepStrictEqual(unfoldIcs('A:1\r\nB:2\r\n long\tline\rC:3\n'), ['A:1', 'B:2long\tline', 'C:3', '']);
