@@ -44,6 +44,7 @@ const ids = [
   'viewLabel', 'prevBtn', 'todayBtn', 'nextBtn', 'newEventBtn', 'themeToggle',
   'viewMonth', 'viewWeek', 'viewDay', 'viewAgenda',
   'miniMonth', 'calendarList', 'newCalName', 'newCalColorBtn', 'calColorPop', 'calColorGrid', 'addCalBtn', 'mainView',
+  'newCalUrl', 'addCalUrlBtn', 'calUrlStatus',
   'eventModal', 'evModalTitle', 'eventForm', 'evTitle', 'evCalendar', 'evCalDot', 'evDate',
   'evAllDay', 'evStart', 'evEnd', 'evLocation', 'evNotes', 'evReminder',
   'evRepeat', 'evRepeatInterval', 'evRepeatUntil', 'evDelete', 'evCancel',
@@ -55,7 +56,9 @@ ids.forEach(id => { els[id] = makeEl(); });
 
 const store = {};
 const documentElement = makeEl();
+let fetchImpl = () => Promise.reject(new Error('fetch not stubbed'));
 const sandbox = {
+  fetch: (...args) => fetchImpl(...args),
   document: {
     getElementById: id => els[id],
     createElement: () => makeEl(),
@@ -237,4 +240,111 @@ assert.deepStrictEqual(
   ['2025-06-02', '2025-06-09', '2025-06-16', '2025-06-23', '2025-06-30']
 );
 
-console.log('Smoke test passed');
+(async () => {
+  const flush = () => new Promise(r => setImmediate(r));
+  const ymd = today.replace(/-/g, '');
+  const ICS = [
+    'BEGIN:VCALENDAR',
+    'X-WR-CALNAME:Team Events',
+    'BEGIN:VEVENT',
+    'UID:evt-1@example.com',
+    'SUMMARY:Standup',
+    'DTSTART:20260601T090000',
+    'DTEND:20260601T093000',
+    'RRULE:FREQ=DAILY;UNTIL=20260603',
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'UID:evt-2@example.com',
+    'SUMMARY:Release day',
+    'DTSTART;VALUE=DATE:20260605',
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'UID:evt-3@example.com',
+    'SUMMARY:Url ping',
+    'DTSTART:' + ymd + 'T090000',
+    'DTEND:' + ymd + 'T093000',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+  let requestedUrl = null;
+  fetchImpl = (u) => {
+    requestedUrl = u;
+    return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(ICS) });
+  };
+
+  els.newCalUrl.value = 'https://cal.example.com/team.ics';
+  els.addCalUrlBtn._handlers.click();
+  assert.strictEqual(els.calUrlStatus.hidden, false, 'status shows while loading');
+  await flush(); await flush(); await flush();
+  assert.strictEqual(requestedUrl, 'https://cal.example.com/team.ics', 'feed URL was fetched');
+  let cals = JSON.parse(store[CALENDARS_KEY]);
+  assert.strictEqual(cals.length, 4, 'url calendar added to storage');
+  const urlCal = cals[3];
+  assert.strictEqual(urlCal.url, 'https://cal.example.com/team.ics');
+  assert.strictEqual(urlCal.name, 'Team Events', 'calendar name comes from X-WR-CALNAME');
+  assert.strictEqual(urlCal.color, '#f44336', 'url calendar uses the pending color');
+  assert.strictEqual(els.newCalUrl.value, '', 'url input cleared after add');
+  assert.ok(els.calUrlStatus.textContent.indexOf('3 events') !== -1, 'status reports imported event count');
+  assert.strictEqual(els.calendarList.children.length, 4, 'url calendar listed in sidebar');
+  let evs = JSON.parse(store[STORAGE_KEY]);
+  assert.strictEqual(evs.length, 4, 'previous event plus three imported');
+  const imported = evs.filter(e => e.calendarId === urlCal.id);
+  assert.strictEqual(imported.length, 3);
+  assert.strictEqual(imported[0].title, 'Standup');
+  assert.strictEqual(imported[0].repeat.freq, 'daily');
+  assert.strictEqual(imported[0].repeat.until, '2026-06-03');
+  assert.strictEqual(imported[1].allDay, true);
+  assert.strictEqual(imported[1].date, '2026-06-05');
+
+  const urlRow = els.calendarList.children[3];
+  const refreshBtn = urlRow.children[3];
+  assert.strictEqual(refreshBtn.className, 'cal-refresh', 'url calendar row has a refresh button');
+  refreshBtn._handlers.click({ stopPropagation() {} });
+  await flush(); await flush(); await flush();
+  assert.ok(els.calUrlStatus.textContent.indexOf('Refreshed') !== -1, 'refresh announces the result');
+  evs = JSON.parse(store[STORAGE_KEY]);
+  assert.strictEqual(evs.filter(e => e.calendarId === urlCal.id).length, 3, 'refresh replaces events instead of duplicating them');
+
+  els.newEventBtn._handlers.click();
+  assert.strictEqual(els.evCalendar.children.length, 3, 'url calendar is not offered for new events');
+  els.evCancel._handlers.click();
+
+  const pingRow = findAll(els.mainView, 'ag-row').find(r => texts(r).join(' ').indexOf('Url ping') !== -1);
+  assert.ok(pingRow, 'imported event renders in the agenda');
+  pingRow._handlers.click();
+  assert.strictEqual(els.detailModal.hidden, false, 'detail modal opens for imported event');
+  assert.strictEqual(els.detEdit.style.display, 'none', 'edit hidden for url-sourced event');
+  assert.strictEqual(els.detDelete.style.display, 'none', 'delete hidden for url-sourced event');
+  els.detClose._handlers.click();
+
+  const delBtn = urlRow.children[4];
+  assert.strictEqual(delBtn.className, 'cal-del');
+  delBtn._handlers.click();
+  assert.strictEqual(els.calDelModal.hidden, false, 'delete confirmation opens');
+  assert.ok(els.calDelText.textContent.indexOf('Unsubscribe') !== -1, 'url calendar uses unsubscribe wording');
+  assert.ok(els.calDelText.textContent.indexOf('3 events') !== -1, 'popup counts the events that will be removed');
+  els.calDelConfirm._handlers.click();
+  cals = JSON.parse(store[CALENDARS_KEY]);
+  assert.strictEqual(cals.length, 3, 'url calendar removed');
+  evs = JSON.parse(store[STORAGE_KEY]);
+  assert.strictEqual(evs.length, 1, 'imported events removed with the calendar');
+  assert.strictEqual(evs[0].title, 'Day off', 'local events untouched');
+
+  els.newCalUrl.value = 'not-a-url';
+  els.addCalUrlBtn._handlers.click();
+  assert.strictEqual(els.calUrlStatus.hidden, false);
+  assert.strictEqual(els.calUrlStatus.className, 'cal-url-status error', 'invalid URL shows an error');
+  cals = JSON.parse(store[CALENDARS_KEY]);
+  assert.strictEqual(cals.length, 3, 'invalid URL adds nothing');
+
+  fetchImpl = () => Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve('nope') });
+  els.newCalUrl.value = 'https://cal.example.com/missing.ics';
+  els.addCalUrlBtn._handlers.click();
+  await flush(); await flush(); await flush();
+  assert.strictEqual(els.calUrlStatus.className, 'cal-url-status error', 'failed fetch shows an error');
+  assert.ok(els.calUrlStatus.textContent.indexOf('HTTP 404') !== -1, 'error includes the HTTP status');
+  cals = JSON.parse(store[CALENDARS_KEY]);
+  assert.strictEqual(cals.length, 3, 'failed fetch adds no calendar');
+
+  console.log('Smoke test passed');
+})().catch(e => { console.error(e); process.exit(1); });

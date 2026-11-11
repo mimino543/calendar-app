@@ -600,7 +600,8 @@ input:disabled { opacity: 0.5; }
   align-items: center;
 }
 
-.cal-add input[type="text"] {
+.cal-add input[type="text"],
+.cal-add input[type="url"] {
   flex: 1;
   min-width: 0;
   padding: 6px 8px;
@@ -619,6 +620,27 @@ input:disabled { opacity: 0.5; }
   cursor: pointer;
   flex: none;
 }
+
+.cal-url-status {
+  font-size: 11px;
+  margin-top: 6px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.cal-url-status.error { color: var(--danger); }
+
+.cal-refresh {
+  padding: 1px 7px;
+  font-size: 13px;
+  line-height: 1.4;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+}
+
+.cal-refresh:hover { color: var(--accent); background: var(--panel2); }
 
 .cal-color-pop {
   position: fixed;
