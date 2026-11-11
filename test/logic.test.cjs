@@ -17,6 +17,9 @@ const {
   sortEvents, formatLong, formatShort, repeatLabel, repeatOccurrences,
   eventOccurrences, defaultCalendars, CALENDAR_COLORS, STORAGE_KEY, CALENDARS_KEY, THEME_KEY
 } = loadApp();
+const {
+  pad2, unfoldIcs, parseIcsLine, icsUnescape, parseIcsDateTime, parseIcsDurationMs, parseIcsRrule, parseIcs
+} = loadApp();
 
 assert.strictEqual(STORAGE_KEY, 'calendar.events.v2');
 assert.strictEqual(typeof CALENDARS_KEY, 'string');
@@ -203,5 +206,101 @@ assert.ok(numRule && /border-radius:\s*50%/.test(numRule[1]) && /width:\s*30px/.
 const selRule = css.match(/\.wg-day-h\.selected \.wg-num\s*\{([^}]*)\}/);
 assert.ok(selRule && /background:\s*var\(--accent\)/.test(selRule[1]) && !/outline/.test(selRule[1]),
   'selected day uses a filled small circle, not a large outline');
+
+// ICS parsing: line unfolding and content-line splitting.
+assert.deepStrictEqual(unfoldIcs('A:1\r\nB:2\r\n long\tline\rC:3\n'), ['A:1', 'B:2long\tline', 'C:3', '']);
+assert.deepStrictEqual(unfoldIcs('SUMMARY:x\r\n y'), ['SUMMARY:xy'], 'unfolding removes the leading whitespace char');
+assert.deepStrictEqual(parseIcsLine('DTSTART;TZID="America/New_York":20260115T090000'),
+  { name: 'DTSTART', params: { TZID: 'America/New_York' }, value: '20260115T090000' });
+assert.strictEqual(parseIcsLine('no colon here'), null);
+assert.strictEqual(icsUnescape('a\\,b\\\\c\\;d\\ne'), 'a,b\\c;d\ne');
+
+// ICS date/time values: floating, UTC, and all-day forms.
+assert.deepStrictEqual(parseIcsDateTime('20260115T093000'), { date: '2026-01-15', time: '09:30', allDay: false });
+assert.deepStrictEqual(parseIcsDateTime('20260115'), { date: '2026-01-15', time: '', allDay: true });
+const utc = parseIcsDateTime('20260115T093000Z');
+const utcLocal = new Date(Date.UTC(2026, 0, 15, 9, 30, 0));
+assert.strictEqual(utc.date, dateToKey(utcLocal), 'UTC value converts to the local date');
+assert.strictEqual(utc.time, pad2(utcLocal.getHours()) + ':' + pad2(utcLocal.getMinutes()), 'UTC value converts to the local time');
+assert.strictEqual(utc.allDay, false);
+assert.strictEqual(parseIcsDateTime('nope'), null);
+assert.strictEqual(parseIcsDateTime('20261340T000000'), null);
+
+// Durations and recurrence rules.
+assert.strictEqual(parseIcsDurationMs('PT1H30M'), 90 * 60000);
+assert.strictEqual(parseIcsDurationMs('P1DT2H'), 26 * 3600000);
+assert.strictEqual(parseIcsDurationMs('P1W'), 7 * 24 * 3600000);
+assert.strictEqual(parseIcsDurationMs('P'), null);
+assert.deepStrictEqual(parseIcsRrule('FREQ=WEEKLY;INTERVAL=2;UNTIL=20260630'),
+  { freq: 'weekly', interval: 2, until: '2026-06-30' });
+assert.deepStrictEqual(parseIcsRrule('FREQ=DAILY;UNTIL=20260603T000000Z'),
+  { freq: 'daily', interval: 1, until: dateToKey(new Date(Date.UTC(2026, 5, 3, 0, 0, 0))) });
+assert.deepStrictEqual(parseIcsRrule('FREQ=HOURLY;COUNT=3'), { freq: 'none', interval: 1, until: '' });
+assert.deepStrictEqual(parseIcsRrule(''), { freq: 'none', interval: 1, until: '' });
+
+// Full VCALENDAR parse: recurrence, all-day, duration, cancelled, folded lines, escaping.
+const ics = [
+  'BEGIN:VCALENDAR',
+  'VERSION:2.0',
+  'X-WR-CALNAME:Team Events',
+  'BEGIN:VEVENT',
+  'UID:evt-1@example.com',
+  'SUMMARY:Standup\\, daily',
+  'DTSTART:20260601T090000',
+  'DTEND:20260601T093000',
+  'RRULE:FREQ=DAILY;INTERVAL=1;UNTIL=20260603',
+  'LOCATION:Room 1',
+  'DESCRIPTION:Line one\\nLine two',
+  'END:VEVENT',
+  'BEGIN:VEVENT',
+  'UID:evt-2@example.com',
+  'SUMMARY:Release day',
+  'DTSTART;VALUE=DATE:20260605',
+  'END:VEVENT',
+  'BEGIN:VEVENT',
+  'UID:evt-3@example.com',
+  'SUMMARY:Focus time',
+  'DTSTART:20260610T140000',
+  'DURATION:PT1H30M',
+  'END:VEVENT',
+  'BEGIN:VEVENT',
+  'UID:evt-4@example.com',
+  'SUMMARY:Cancelled thing',
+  'DTSTART:20260611T100000',
+  'STATUS:CANCELLED',
+  'END:VEVENT',
+  'BEGIN:VEVENT',
+  'UID:evt-5@example.com',
+  'SUMMARY:Folded summary that is',
+  '  very long',
+  'DTSTART:20260612T080000',
+  'END:VEVENT',
+  'END:VCALENDAR'
+].join('\r\n');
+const parsed = parseIcs(ics);
+assert.strictEqual(parsed.name, 'Team Events');
+assert.strictEqual(parsed.events.length, 4, 'cancelled event is skipped');
+const e1 = parsed.events[0];
+assert.deepStrictEqual(e1, {
+  uid: 'evt-1@example.com',
+  title: 'Standup, daily',
+  date: '2026-06-01',
+  start: '09:00',
+  end: '09:30',
+  allDay: false,
+  location: 'Room 1',
+  notes: 'Line one\nLine two',
+  reminder: '',
+  repeat: { freq: 'daily', interval: 1, until: '2026-06-03' }
+});
+const e2 = parsed.events[1];
+assert.deepStrictEqual([e2.allDay, e2.date, e2.start, e2.end, e2.repeat.freq], [true, '2026-06-05', '', '', 'none']);
+const e3 = parsed.events[2];
+assert.deepStrictEqual([e3.date, e3.start, e3.end], ['2026-06-10', '14:00', '15:30'], 'DURATION extends the end time');
+const e5 = parsed.events[3];
+assert.strictEqual(e5.title, 'Folded summary that is very long', 'continuation lines are unfolded');
+assert.strictEqual(e5.end, '09:00', 'missing end defaults to one hour after start');
+assert.strictEqual(parseIcs('BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n').events.length, 0);
+assert.strictEqual(parseIcs('BEGIN:VEVENT\r\nSUMMARY:No start\r\nEND:VEVENT').events.length, 0, 'event without DTSTART is skipped');
 
 console.log('All logic tests passed');

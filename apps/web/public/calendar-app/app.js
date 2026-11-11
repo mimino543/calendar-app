@@ -150,6 +150,160 @@
     ];
   }
 
+  function unfoldIcs(text) {
+    var lines = String(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    var out = [];
+    lines.forEach(function (line) {
+      if ((line.charAt(0) === ' ' || line.charAt(0) === '\t') && out.length) {
+        out[out.length - 1] += line.slice(1);
+      } else {
+        out.push(line);
+      }
+    });
+    return out;
+  }
+
+  function parseIcsLine(line) {
+    var inQuotes = false;
+    var colon = -1;
+    for (var i = 0; i < line.length; i++) {
+      var ch = line.charAt(i);
+      if (ch === '"') inQuotes = !inQuotes;
+      else if (ch === ':' && !inQuotes) { colon = i; break; }
+    }
+    if (colon === -1) return null;
+    var head = line.slice(0, colon);
+    var value = line.slice(colon + 1);
+    var semi = head.indexOf(';');
+    var name = (semi === -1 ? head : head.slice(0, semi)).trim().toUpperCase();
+    var params = {};
+    if (semi !== -1) {
+      head.slice(semi + 1).split(';').forEach(function (p) {
+        var eq = p.indexOf('=');
+        if (eq !== -1) params[p.slice(0, eq).trim().toUpperCase()] = p.slice(eq + 1).replace(/^"|"$/g, '');
+      });
+    }
+    return { name: name, params: params, value: value };
+  }
+
+  function icsUnescape(text) {
+    return String(text)
+      .replace(/\\n/gi, '\n')
+      .replace(/\\,/g, ',')
+      .replace(/\\;/g, ';')
+      .replace(/\\\\/g, '\\');
+  }
+
+  function parseIcsDateTime(value) {
+    var m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/.exec(String(value).trim());
+    if (!m) return null;
+    var y = +m[1], mo = +m[2] - 1, d = +m[3];
+    if (mo < 0 || mo > 11 || d < 1 || d > 31) return null;
+    if (!m[4]) return { date: toKey(y, mo, d), time: '', allDay: true };
+    var hh = +m[4], mi = +m[5], ss = +m[6] || 0;
+    if (m[7] === 'Z') {
+      var dt = new Date(Date.UTC(y, mo, d, hh, mi, ss));
+      return { date: dateToKey(dt), time: pad2(dt.getHours()) + ':' + pad2(dt.getMinutes()), allDay: false };
+    }
+    return { date: toKey(y, mo, d), time: pad2(hh) + ':' + pad2(mi), allDay: false };
+  }
+
+  function parseIcsDurationMs(value) {
+    var m = /^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(String(value).trim().toUpperCase());
+    if (!m || (!m[1] && !m[2] && !m[3] && !m[4] && !m[5])) return null;
+    return (((+(m[1] || 0) * 7 + +(m[2] || 0)) * 24 + +(m[3] || 0)) * 60 + +(m[4] || 0)) * 60000 + (+(m[5] || 0)) * 1000;
+  }
+
+  function parseIcsRrule(value) {
+    var parts = {};
+    String(value).split(';').forEach(function (p) {
+      var eq = p.indexOf('=');
+      if (eq !== -1) parts[p.slice(0, eq).trim().toUpperCase()] = p.slice(eq + 1);
+    });
+    var freq = String(parts.FREQ || 'none').toLowerCase();
+    if (['daily', 'weekly', 'monthly', 'yearly'].indexOf(freq) === -1) freq = 'none';
+    var until = '';
+    if (parts.UNTIL) {
+      var u = parseIcsDateTime(parts.UNTIL);
+      if (u) until = u.date;
+    }
+    return { freq: freq, interval: Math.max(1, parseInt(parts.INTERVAL, 10) || 1), until: until };
+  }
+
+  function icsEventToApp(cur) {
+    var s = cur.dtstart;
+    if (!s || cur.cancelled) return null;
+    var ev = {
+      uid: cur.uid || '',
+      title: (cur.title || '').trim() || 'Event',
+      date: s.date,
+      start: '',
+      end: '',
+      allDay: !!s.allDay,
+      location: (cur.location || '').trim(),
+      notes: (cur.notes || '').trim(),
+      reminder: '',
+      repeat: cur.repeat || { freq: 'none', interval: 1, until: '' }
+    };
+    if (s.allDay) return ev;
+    ev.start = s.time || '00:00';
+    var endTime = null;
+    if (cur.dtend && !cur.dtend.allDay) {
+      endTime = cur.dtend.date === s.date ? cur.dtend.time : '23:59';
+    } else if (cur.duration) {
+      var ms = parseIcsDurationMs(cur.duration);
+      if (ms != null) {
+        var base = keyToDate(s.date);
+        var mins = minutesOf(ev.start) || 0;
+        var dt = new Date(base.getFullYear(), base.getMonth(), base.getDate(), Math.floor(mins / 60), mins % 60);
+        dt = new Date(dt.getTime() + ms);
+        endTime = dateToKey(dt) === s.date ? pad2(dt.getHours()) + ':' + pad2(dt.getMinutes()) : '23:59';
+      }
+    }
+    var sm = minutesOf(ev.start);
+    var em = minutesOf(endTime);
+    if (em == null || em <= sm) em = sm + 60;
+    ev.end = timeOf(em);
+    return ev;
+  }
+
+  function parseIcs(text) {
+    var name = '';
+    var events = [];
+    var cur = null;
+    unfoldIcs(text).forEach(function (line) {
+      if (!line) return;
+      var upper = line.toUpperCase();
+      if (upper === 'BEGIN:VEVENT') { cur = { repeat: { freq: 'none', interval: 1, until: '' } }; return; }
+      if (upper === 'END:VEVENT') {
+        if (cur) {
+          var ev = icsEventToApp(cur);
+          if (ev) events.push(ev);
+        }
+        cur = null;
+        return;
+      }
+      var p = parseIcsLine(line);
+      if (!p) return;
+      if (!cur) {
+        if (p.name === 'X-WR-CALNAME') name = icsUnescape(p.value).trim();
+        return;
+      }
+      switch (p.name) {
+        case 'UID': cur.uid = p.value.trim(); break;
+        case 'SUMMARY': cur.title = icsUnescape(p.value); break;
+        case 'DTSTART': cur.dtstart = parseIcsDateTime(p.value); break;
+        case 'DTEND': cur.dtend = parseIcsDateTime(p.value); break;
+        case 'DURATION': cur.duration = p.value; break;
+        case 'RRULE': cur.repeat = parseIcsRrule(p.value); break;
+        case 'LOCATION': cur.location = icsUnescape(p.value); break;
+        case 'DESCRIPTION': cur.notes = icsUnescape(p.value); break;
+        case 'STATUS': cur.cancelled = p.value.trim().toUpperCase() === 'CANCELLED'; break;
+      }
+    });
+    return { name: name, events: events };
+  }
+
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       STORAGE_KEY: STORAGE_KEY,
@@ -178,7 +332,15 @@
       repeatOccurrences: repeatOccurrences,
       eventOccurrences: eventOccurrences,
       defaultCalendars: defaultCalendars,
-      CALENDAR_COLORS: CALENDAR_COLORS
+      CALENDAR_COLORS: CALENDAR_COLORS,
+      unfoldIcs: unfoldIcs,
+      parseIcsLine: parseIcsLine,
+      icsUnescape: icsUnescape,
+      parseIcsDateTime: parseIcsDateTime,
+      parseIcsDurationMs: parseIcsDurationMs,
+      parseIcsRrule: parseIcsRrule,
+      icsEventToApp: icsEventToApp,
+      parseIcs: parseIcs
     };
     return;
   }
@@ -262,6 +424,9 @@
     calColorPop: document.getElementById('calColorPop'),
     calColorGrid: document.getElementById('calColorGrid'),
     addCalBtn: document.getElementById('addCalBtn'),
+    newCalUrl: document.getElementById('newCalUrl'),
+    addCalUrlBtn: document.getElementById('addCalUrlBtn'),
+    calUrlStatus: document.getElementById('calUrlStatus'),
     mainView: document.getElementById('mainView'),
     eventModal: document.getElementById('eventModal'),
     evModalTitle: document.getElementById('evModalTitle'),
@@ -436,6 +601,7 @@
         togglePalette({ mode: 'cal', id: c.id }, swatch);
       });
       var name = el('span', 'cal-name', c.name);
+      if (c.url) name.title = 'Subscribed from ' + c.url;
       var toggle = el('input');
       toggle.type = 'checkbox';
       toggle.checked = c.visible !== false;
@@ -448,6 +614,16 @@
       row.appendChild(swatch);
       row.appendChild(name);
       row.appendChild(toggle);
+      if (c.url) {
+        var ref = el('button', 'cal-refresh', '↻');
+        ref.type = 'button';
+        ref.title = 'Refresh from URL';
+        ref.addEventListener('click', function (e) {
+          if (e && e.stopPropagation) e.stopPropagation();
+          refreshUrlCalendar(c, { announce: true });
+        });
+        row.appendChild(ref);
+      }
       if (calendars.length > 1) {
         var del = el('button', 'cal-del', '×');
         del.type = 'button';
@@ -468,6 +644,92 @@
     render();
   }
 
+  function setUrlStatus(msg, isError) {
+    if (!els.calUrlStatus) return;
+    els.calUrlStatus.textContent = msg || '';
+    els.calUrlStatus.hidden = !msg;
+    els.calUrlStatus.className = 'cal-url-status' + (isError ? ' error' : '');
+  }
+
+  function urlHost(url) {
+    var m = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(url);
+    return m ? m[1] : '';
+  }
+
+  function calendarByUrl(url) {
+    for (var i = 0; i < calendars.length; i++) if (calendars[i].url === url) return calendars[i];
+    return null;
+  }
+
+  function importUrlEvents(cal, parsed) {
+    events = events.filter(function (e) { return e.calendarId !== cal.id; });
+    parsed.events.forEach(function (pe) {
+      events.push({
+        id: uid(),
+        title: pe.title,
+        calendarId: cal.id,
+        date: pe.date,
+        start: pe.allDay ? '' : pe.start,
+        end: pe.allDay ? '' : pe.end,
+        allDay: pe.allDay,
+        location: pe.location,
+        notes: pe.notes,
+        reminder: '',
+        repeat: pe.repeat
+      });
+    });
+    saveJSON(STORAGE_KEY, events);
+  }
+
+  function fetchIcs(url) {
+    return fetch(url).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.text();
+    }).then(function (text) { return parseIcs(text); });
+  }
+
+  function refreshUrlCalendar(cal, opts) {
+    opts = opts || {};
+    return fetchIcs(cal.url).then(function (parsed) {
+      importUrlEvents(cal, parsed);
+      saveJSON(CALENDARS_KEY, calendars);
+      render();
+      if (opts.announce) setUrlStatus('Refreshed "' + cal.name + '" (' + parsed.events.length + ' events)', false);
+      return parsed.events.length;
+    }).catch(function (err) {
+      if (opts.announce) setUrlStatus('Refresh failed: ' + (err && err.message ? err.message : err), true);
+      else if (typeof console !== 'undefined' && console.warn) console.warn('Calendar sync failed for ' + cal.url, err);
+      return -1;
+    });
+  }
+
+  function addCalendarFromUrl() {
+    var url = (els.newCalUrl.value || '').trim();
+    if (!/^https?:\/\/\S+$/i.test(url)) {
+      setUrlStatus('Enter a valid http(s) calendar URL (.ics)', true);
+      return;
+    }
+    setUrlStatus('Loading ' + url + ' …', false);
+    var existing = calendarByUrl(url);
+    fetchIcs(url).then(function (parsed) {
+      var cal = existing;
+      if (!cal) {
+        var name = (els.newCalName.value || '').trim() || parsed.name || urlHost(url) || 'Calendar';
+        cal = { id: uid(), name: name, color: pendingColor, visible: true, url: url };
+        calendars.push(cal);
+        saveJSON(CALENDARS_KEY, calendars);
+      }
+      importUrlEvents(cal, parsed);
+      els.newCalUrl.value = '';
+      els.newCalName.value = '';
+      render();
+      setUrlStatus((existing ? 'Refreshed "' : 'Added "') + cal.name + '" (' + parsed.events.length + ' events)', false);
+    }).catch(function (err) {
+      setUrlStatus('Could not load calendar: ' + (err && err.message ? err.message : err)
+        + '. The server must allow cross-origin requests (CORS).', true);
+    });
+  }
+
   function requestDeleteCalendar(id) {
     if (calendars.length <= 1) return;
     var target = calendarById(id);
@@ -475,9 +737,15 @@
     for (var i = 0; i < calendars.length; i++) {
       if (calendars[i].id !== id) { fallback = calendars[i]; break; }
     }
-    if (!target || !fallback) return;
+    if (!target) return;
     pendingDeleteId = id;
-    els.calDelText.textContent = 'Delete calendar "' + target.name + '"? Its events will move to "' + fallback.name + '".';
+    if (target.url) {
+      var n = events.filter(function (e) { return e.calendarId === id; }).length;
+      els.calDelText.textContent = 'Unsubscribe from "' + target.name + '"? Its ' + n + ' event' + (n === 1 ? '' : 's') + ' will be removed.';
+    } else {
+      if (!fallback) return;
+      els.calDelText.textContent = 'Delete calendar "' + target.name + '"? Its events will move to "' + fallback.name + '".';
+    }
     els.calDelModal.hidden = false;
   }
 
@@ -490,9 +758,14 @@
     var id = pendingDeleteId;
     closeCalDel();
     if (!id || calendars.length <= 1) return;
+    var target = calendarById(id);
     calendars = calendars.filter(function (c) { return c.id !== id; });
-    var fallback = calendars[0].id;
-    events.forEach(function (ev) { if (ev.calendarId === id) ev.calendarId = fallback; });
+    if (target && target.url) {
+      events = events.filter(function (ev) { return ev.calendarId !== id; });
+    } else {
+      var fallback = calendars[0].id;
+      events.forEach(function (ev) { if (ev.calendarId === id) ev.calendarId = fallback; });
+    }
     saveJSON(CALENDARS_KEY, calendars);
     saveJSON(STORAGE_KEY, events);
     render();
@@ -733,12 +1006,17 @@
   function rebuildCalendarOptions(selectedId) {
     els.evCalendar.innerHTML = '';
     calendars.forEach(function (c) {
+      if (c.url && c.id !== selectedId) return;
       var o = el('option', '', c.name);
       o.value = c.id;
       o.style.color = c.color;
       els.evCalendar.appendChild(o);
     });
-    els.evCalendar.value = selectedId || (calendars[0] && calendars[0].id);
+    var def = null;
+    for (var i = 0; i < calendars.length; i++) {
+      if (!calendars[i].url) { def = calendars[i].id; break; }
+    }
+    els.evCalendar.value = selectedId || def || (calendars[0] && calendars[0].id);
     updateCalDot();
   }
 
@@ -833,6 +1111,9 @@
 
   function openDetail(ev) {
     var c = calendarById(ev.calendarId);
+    var readOnly = !!(c && c.url);
+    els.detEdit.style.display = readOnly ? 'none' : '';
+    els.detDelete.style.display = readOnly ? 'none' : '';
     state.editing = ev;
     els.detBody.innerHTML = '';
     els.detBody.appendChild(el('h3', 'det-title', ev.title));
@@ -886,6 +1167,14 @@
   els.evAllDay.addEventListener('change', updateTimeFields);
   els.evCalendar.addEventListener('change', updateCalDot);
   els.addCalBtn.addEventListener('click', addCalendar);
+  els.addCalUrlBtn.addEventListener('click', addCalendarFromUrl);
+  els.newCalUrl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      if (e.preventDefault) e.preventDefault();
+      addCalendarFromUrl();
+    }
+  });
+  els.newCalUrl.addEventListener('input', function () { setUrlStatus('', false); });
   els.newCalColorBtn.addEventListener('click', function (e) {
     if (e && e.stopPropagation) e.stopPropagation();
     togglePalette({ mode: 'new' }, els.newCalColorBtn);
@@ -926,6 +1215,9 @@
   });
 
   migrateLegacy();
+  if (typeof fetch === 'function') {
+    calendars.forEach(function (c) { if (c.url) refreshUrlCalendar(c, {}); });
+  }
   applyTheme(theme);
   els.newCalColorBtn.style.background = pendingColor;
   render();
