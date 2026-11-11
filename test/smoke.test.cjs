@@ -346,5 +346,41 @@ assert.deepStrictEqual(
   cals = JSON.parse(store[CALENDARS_KEY]);
   assert.strictEqual(cals.length, 3, 'failed fetch adds no calendar');
 
+  // Inline rename: click the name, edit, Enter commits.
+  const nameEl = els.calendarList.children[0].children[1];
+  assert.strictEqual(nameEl.className, 'cal-name');
+  nameEl._handlers.click({ stopPropagation() {} });
+  const nameInput = els.calendarList.children[0].children[1];
+  assert.strictEqual(nameInput.className, 'cal-name-input', 'clicking a calendar name opens an inline input');
+  assert.strictEqual(nameInput.value, 'Personal');
+  nameInput.value = 'Home';
+  nameInput._handlers.keydown({ key: 'Enter', preventDefault() {} });
+  cals = JSON.parse(store[CALENDARS_KEY]);
+  assert.strictEqual(cals[0].name, 'Home', 'rename persisted to storage');
+  assert.strictEqual(els.calendarList.children[0].children[1].textContent, 'Home', 'sidebar shows the new name');
+
+  // Blur commits too; Escape cancels.
+  els.calendarList.children[0].children[1]._handlers.click({ stopPropagation() {} });
+  const input2 = els.calendarList.children[0].children[1];
+  input2.value = 'Home 2';
+  input2._handlers.blur();
+  cals = JSON.parse(store[CALENDARS_KEY]);
+  assert.strictEqual(cals[0].name, 'Home 2', 'blur commits the rename');
+  els.calendarList.children[0].children[1]._handlers.click({ stopPropagation() {} });
+  const input3 = els.calendarList.children[0].children[1];
+  input3.value = 'Nope';
+  input3._handlers.keydown({ key: 'Escape', preventDefault() {} });
+  cals = JSON.parse(store[CALENDARS_KEY]);
+  assert.strictEqual(cals[0].name, 'Home 2', 'escape cancels the rename');
+  assert.strictEqual(els.calendarList.children[0].children[1].className, 'cal-name', 'input closes after escape');
+
+  // Empty rename keeps the old name.
+  els.calendarList.children[0].children[1]._handlers.click({ stopPropagation() {} });
+  const input4 = els.calendarList.children[0].children[1];
+  input4.value = '   ';
+  input4._handlers.keydown({ key: 'Enter', preventDefault() {} });
+  cals = JSON.parse(store[CALENDARS_KEY]);
+  assert.strictEqual(cals[0].name, 'Home 2', 'blank name is rejected');
+
   console.log('Smoke test passed');
 })().catch(e => { console.error(e); process.exit(1); });
